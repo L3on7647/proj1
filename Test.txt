@@ -6,9 +6,9 @@
 #End If
 ' -----------------------------------------
 
-Sub PasportSuperFormat()
+Sub PasportBezProbelRasmli()
     Dim pptApp As Object
-    Dim targetPres As Object ' Shablon fayl
+    Dim targetPres As Object ' Shablon
     Dim sourcePres As Object ' Donor (Rasmlar bazasi)
     Dim pptSlide As Object
     Dim excelSheet As Worksheet
@@ -31,7 +31,6 @@ Sub PasportSuperFormat()
     
     ' ==============================================
 
-    ' PowerPointni ochish
     On Error Resume Next
     Set pptApp = GetObject(, "PowerPoint.Application")
     If Err.Number <> 0 Then Set pptApp = CreateObject("PowerPoint.Application")
@@ -47,7 +46,7 @@ Sub PasportSuperFormat()
     ' --- SIKL ---
     For i = 2 To lastRow
         
-        DoEvents: Sleep 200
+        DoEvents: Sleep 100
         
         ' 1. Shablondan nusxa olamiz
         targetPres.Slides(1).Duplicate
@@ -57,7 +56,6 @@ Sub PasportSuperFormat()
         For Each shp In pptSlide.Shapes
             If shp.HasTable Then
                 Set tbl = shp.Table
-                ' Jadval kataklarini to'ldirish (Eski tartib bo'yicha 1-10)
                 tbl.Cell(1, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 1).Value
                 tbl.Cell(2, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 2).Value
                 tbl.Cell(3, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 3).Value
@@ -71,12 +69,13 @@ Sub PasportSuperFormat()
             End If
         Next shp
         
-        ' 3. VIN kodni olish (K ustun)
-        vinCode = Trim(excelSheet.Cells(i, 11).Value)
+        ' 3. VIN kodni olish va PROBELLARDAN TOZALASH
+        ' Replace(..., " ", "") hamma bo'sh joylarni olib tashlaydi
+        vinCode = Replace(Trim(excelSheet.Cells(i, 11).Value), " ", "")
         
-        ' 4. Rasmlarni topib, 2x2 formatda joylash
+        ' 4. Rasmlarni qidirish
         If Len(vinCode) > 3 Then
-            Call RasmlarniFormatlabJoyla(sourcePres, pptSlide, vinCode)
+            Call RasmlarniTopVaJoyla(sourcePres, pptSlide, vinCode)
         End If
         
         ' 5. Slaydni oxiriga o'tkazish
@@ -84,88 +83,108 @@ Sub PasportSuperFormat()
         
     Next i
 
-    MsgBox "Tayyor! Rasmlar 9x6.86 sm formatda joylandi.", vbInformation
+    MsgBox "Tayyor! Rasmlar joylandi.", vbInformation
 End Sub
 
-' --- RASMLARNI FORMATLASH VA JOYLASH FUNKSIYASI ---
-Sub RasmlarniFormatlabJoyla(sourcePres As Object, targetSlide As Object, vin As String)
+' --- QIDIRISH VA JOYLASH FUNKSIYASI ---
+Sub RasmlarniTopVaJoyla(sourcePres As Object, targetSlide As Object, cleanVin As String)
     Dim sld As Object
     Dim shp As Object
     Dim foundSlide As Object
     Dim picCount As Integer
     Dim newPic As Object
+    Dim slideText As String
     
     ' O'lchamlar (Pointlarda): 1 sm = 28.35 point
-    Dim imgWidth As Double: imgWidth = 255 ' 9 sm
+    Dim imgWidth As Double: imgWidth = 255     ' 9 sm
     Dim imgHeight As Double: imgHeight = 194.5 ' 6.86 sm
     
-    ' Boshlang'ich nuqta (Slaydning o'ng tomoni)
-    ' Jadval taxminan 350 da tugasa, biz 360 dan boshlaymiz
+    ' Rasmlar boshlanish joyi (Slaydning o'ng tomoni)
     Dim startLeft As Double: startLeft = 360 
-    Dim startTop As Double: startTop = 80 ' Sarlavhadan sal pastroq
+    Dim startTop As Double: startTop = 80 
     
     Set foundSlide = Nothing
     
-    ' 1. VIN kod bor slaydni qidirish
+    ' 1. HAR BIR SLAYDNI QIDIRIB CHIQAMIZ
     For Each sld In sourcePres.Slides
         For Each shp In sld.Shapes
+            ' Agar bu Text Box bo'lsa
             If shp.HasTextFrame Then
                 If shp.TextFrame.HasText Then
-                    If InStr(1, shp.TextFrame.TextRange.Text, vin, vbTextCompare) > 0 Then
+                    ' Slayddagi matnni olamiz va PROBELLARNI OLIB TASHLAYMIZ
+                    slideText = Replace(shp.TextFrame.TextRange.Text, " ", "")
+                    ' Katta-kichik harfni bir xil qilib qidiramiz
+                    If InStr(1, slideText, cleanVin, vbTextCompare) > 0 Then
                         Set foundSlide = sld
                         Exit For
                     End If
                 End If
             End If
+            ' Agar VIN jadval ichida yozilgan bo'lsa (Qo'shimcha tekshiruv)
+            If shp.HasTable Then
+                Dim r As Long, c As Long
+                For r = 1 To shp.Table.Rows.Count
+                    For c = 1 To shp.Table.Columns.Count
+                         If shp.Table.Cell(r, c).Shape.TextFrame.HasText Then
+                            slideText = Replace(shp.Table.Cell(r, c).Shape.TextFrame.TextRange.Text, " ", "")
+                            If InStr(1, slideText, cleanVin, vbTextCompare) > 0 Then
+                                Set foundSlide = sld
+                                Exit For
+                            End If
+                         End If
+                    Next c
+                    If Not foundSlide Is Nothing Then Exit For
+                Next r
+            End If
         Next shp
         If Not foundSlide Is Nothing Then Exit For
     Next sld
     
-    ' 2. Rasmlarni ko'chirish va joylash
+    ' 2. AGAR SLAYD TOPILSA, RASMLARNI KO'CHIRAMIZ
     If Not foundSlide Is Nothing Then
         picCount = 0
         For Each shp In foundSlide.Shapes
-            ' Faqat rasmlarni olamiz (Type 13 = Picture)
-            If shp.Type = 13 Or shp.Type = 1 Then
+            ' Faqat rasmlarni olamiz (Type 13=Picture, 1=AutoShape(ba'zan rasm bo'ladi))
+            ' Type 7 (Embedded OLE Object) ham bo'lishi mumkin
+            If shp.Type = 13 Or shp.Type = 1 Or shp.Type = 7 Then
                 
                 shp.Copy
                 DoEvents
-                Sleep 300
+                Sleep 300 ' Buferga tushishini kutish
                 
                 targetSlide.Shapes.Paste
                 DoEvents
                 
+                ' Oxirgi tashlangan rasmni ushlab olamiz
                 Set newPic = targetSlide.Shapes(targetSlide.Shapes.Count)
                 
-                ' --- POSITSIYA LOGIKASI (2x2 GRID) ---
+                ' --- 2x2 FORMATDA JOYLASH ---
                 With newPic
-                    .LockAspectRatio = msoFalse ' Formatni majburlab to'g'irlash uchun
+                    .LockAspectRatio = msoFalse
                     .Width = imgWidth
                     .Height = imgHeight
                     
-                    ' Matematik hisob-kitob (0, 1, 2, 3 indekslar uchun)
-                    ' 1-rasm (0): Left=0, Top=0
-                    ' 2-rasm (1): Left=1, Top=0
-                    ' 3-rasm (2): Left=0, Top=1
-                    ' 4-rasm (3): Left=1, Top=1
+                    ' JOYLASHTIRISH MATEMATIKASI
+                    ' 1-rasm (0): Left=Start, Top=Start
+                    ' 2-rasm (1): Left=Start+Width, Top=Start
+                    ' 3-rasm (2): Left=Start, Top=Start+Height
+                    ' 4-rasm (3): Left=Start+Width, Top=Start+Height
                     
-                    ' Gorizontal joylashuv (Juft/Toq)
                     If (picCount Mod 2) = 0 Then
                         .Left = startLeft
                     Else
-                        .Left = startLeft + imgWidth + 5 ' 5 point oraliq (gap)
+                        .Left = startLeft + imgWidth + 5
                     End If
                     
-                    ' Vertikal joylashuv (0-1 -> tepa, 2-3 -> past)
                     If picCount < 2 Then
                         .Top = startTop
                     Else
-                        .Top = startTop + imgHeight + 5 ' 5 point oraliq (gap)
+                        .Top = startTop + imgHeight + 5
                     End If
                     
-                    ' Chiroyli ko'rinishi uchun ramka (ixtiyoriy)
+                    ' Ramka qo'shish (Chiroyli ko'rinish uchun)
                     .Line.Visible = msoTrue
-                    .Line.Weight = 1
+                    .Line.Weight = 0.5
                     .Line.ForeColor.RGB = RGB(0, 0, 0)
                 End With
                 
