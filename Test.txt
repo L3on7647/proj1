@@ -1,4 +1,4 @@
-' --- BU QISMNI ENG TEPAGA YOZISH SHART ---
+' --- BU QISM ENG TEPADA TURISHI SHART ---
 #If VBA7 Then
     Private Declare PtrSafe Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
 #Else
@@ -6,101 +6,172 @@
 #End If
 ' -----------------------------------------
 
-Sub PowerPointgaPasportFinal()
+Sub PasportSuperFormat()
     Dim pptApp As Object
-    Dim pptPres As Object
+    Dim targetPres As Object ' Shablon fayl
+    Dim sourcePres As Object ' Donor (Rasmlar bazasi)
     Dim pptSlide As Object
     Dim excelSheet As Worksheet
     Dim lastRow As Long, i As Long
-    Dim pptPath As String
-    Dim shp As Object
-    Dim tbl As Object
+    Dim targetPath As String
+    Dim sourcePath As String
+    Dim shp As Object, tbl As Object
+    Dim vinCode As String
     
-    ' --- SOZLAMALAR ---
-    ' PowerPoint manzilingizni to'g'ri kiriting:
-    pptPath = "C:\Users\User\Desktop\Паспорт шаблон (002) (002).pptx" 
+    ' ================= SOZLAMALAR =================
     
-    ' Excel varaq nomi:
+    ' 1. Pasport SHABLON fayli manzili:
+    targetPath = "C:\Users\User\Desktop\Паспорт шаблон (002) (002).pptx"
+    
+    ' 2. Rasmlar va VIN kodlar bor "DONOR" fayl manzili:
+    sourcePath = "C:\Users\User\Desktop\RASMLAR_BAZASI.pptx" 
+    
+    ' 3. Excel varaq nomi:
     Set excelSheet = ThisWorkbook.Sheets("TABLE")
-    ' ------------------
+    
+    ' ==============================================
 
-    ' PowerPointni xavfsiz ochish
+    ' PowerPointni ochish
     On Error Resume Next
     Set pptApp = GetObject(, "PowerPoint.Application")
-    If Err.Number <> 0 Then
-        Set pptApp = CreateObject("PowerPoint.Application")
-    End If
+    If Err.Number <> 0 Then Set pptApp = CreateObject("PowerPoint.Application")
     On Error GoTo 0
-    
     pptApp.Visible = True
-    Set pptPres = pptApp.Presentations.Open(pptPath)
+    
+    ' Fayllarni ochamiz
+    Set targetPres = pptApp.Presentations.Open(targetPath)
+    Set sourcePres = pptApp.Presentations.Open(sourcePath)
     
     lastRow = excelSheet.Cells(excelSheet.Rows.Count, 1).End(xlUp).Row
 
     ' --- SIKL ---
     For i = 2 To lastRow
         
-        ' 1. Slayddan nusxa olamiz
-        pptPres.Slides(1).Duplicate
+        DoEvents: Sleep 200
         
-        ' Kompyuterga dam beramiz (Xatolikni oldini oladi)
-        DoEvents
-        Sleep 500 
+        ' 1. Shablondan nusxa olamiz
+        targetPres.Slides(1).Duplicate
+        Set pptSlide = targetPres.Slides(2)
         
-        ' Nusxa olingan slayd har doim 2-raqamda paydo bo'ladi
-        Set pptSlide = pptPres.Slides(2)
-        
-        ' 2. Jadvalni topib to'ldiramiz
+        ' 2. Jadvalni to'ldirish
         For Each shp In pptSlide.Shapes
             If shp.HasTable Then
                 Set tbl = shp.Table
-                
-                ' --- QATORLAR ---
-                ' Sarlavha (ko'k rangli) hisobga olinmaydi, 
-                ' chunki u jadval ichida emas, alohida figura bo'lishi mumkin.
-                ' Shuning uchun 1-qatordan boshlaymiz:
-                
-                ' 1. Балансда сақловчи
+                ' Jadval kataklarini to'ldirish (Eski tartib bo'yicha 1-10)
                 tbl.Cell(1, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 1).Value
-                
-                ' 2. Мулк номи
                 tbl.Cell(2, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 2).Value
-                
-                ' 3. Манзили
                 tbl.Cell(3, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 3).Value
-                
-                ' 4. Майдони
                 tbl.Cell(4, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 4).Value
-                
-                ' 5. Тавсифи
                 tbl.Cell(5, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 5).Value
-                
-                ' 6. Коммуникация
                 tbl.Cell(6, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 6).Value
-                
-                ' 7. Ҳолати
                 tbl.Cell(7, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 7).Value
-                
-                ' 8. Сана
                 tbl.Cell(8, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 8).Value
-                
-                ' 9. Қиймати
                 tbl.Cell(9, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 9).Value
-                
-                ' 10. Шартлари
                 tbl.Cell(10, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 10).Value
-                
             End If
         Next shp
         
-        ' 3. Tayyor slaydni oxiriga tashlaymiz
-        pptSlide.MoveTo toPos:=pptPres.Slides.Count
+        ' 3. VIN kodni olish (K ustun)
+        vinCode = Trim(excelSheet.Cells(i, 11).Value)
         
-        ' Keyingi qatorga o'tishdan oldin yana kutamiz
-        DoEvents
-        Sleep 200
+        ' 4. Rasmlarni topib, 2x2 formatda joylash
+        If Len(vinCode) > 3 Then
+            Call RasmlarniFormatlabJoyla(sourcePres, pptSlide, vinCode)
+        End If
+        
+        ' 5. Slaydni oxiriga o'tkazish
+        pptSlide.MoveTo toPos:=targetPres.Slides.Count
         
     Next i
 
-    MsgBox "Tayyor! Hammasi tugadi.", vbInformation
+    MsgBox "Tayyor! Rasmlar 9x6.86 sm formatda joylandi.", vbInformation
+End Sub
+
+' --- RASMLARNI FORMATLASH VA JOYLASH FUNKSIYASI ---
+Sub RasmlarniFormatlabJoyla(sourcePres As Object, targetSlide As Object, vin As String)
+    Dim sld As Object
+    Dim shp As Object
+    Dim foundSlide As Object
+    Dim picCount As Integer
+    Dim newPic As Object
+    
+    ' O'lchamlar (Pointlarda): 1 sm = 28.35 point
+    Dim imgWidth As Double: imgWidth = 255 ' 9 sm
+    Dim imgHeight As Double: imgHeight = 194.5 ' 6.86 sm
+    
+    ' Boshlang'ich nuqta (Slaydning o'ng tomoni)
+    ' Jadval taxminan 350 da tugasa, biz 360 dan boshlaymiz
+    Dim startLeft As Double: startLeft = 360 
+    Dim startTop As Double: startTop = 80 ' Sarlavhadan sal pastroq
+    
+    Set foundSlide = Nothing
+    
+    ' 1. VIN kod bor slaydni qidirish
+    For Each sld In sourcePres.Slides
+        For Each shp In sld.Shapes
+            If shp.HasTextFrame Then
+                If shp.TextFrame.HasText Then
+                    If InStr(1, shp.TextFrame.TextRange.Text, vin, vbTextCompare) > 0 Then
+                        Set foundSlide = sld
+                        Exit For
+                    End If
+                End If
+            End If
+        Next shp
+        If Not foundSlide Is Nothing Then Exit For
+    Next sld
+    
+    ' 2. Rasmlarni ko'chirish va joylash
+    If Not foundSlide Is Nothing Then
+        picCount = 0
+        For Each shp In foundSlide.Shapes
+            ' Faqat rasmlarni olamiz (Type 13 = Picture)
+            If shp.Type = 13 Or shp.Type = 1 Then
+                
+                shp.Copy
+                DoEvents
+                Sleep 300
+                
+                targetSlide.Shapes.Paste
+                DoEvents
+                
+                Set newPic = targetSlide.Shapes(targetSlide.Shapes.Count)
+                
+                ' --- POSITSIYA LOGIKASI (2x2 GRID) ---
+                With newPic
+                    .LockAspectRatio = msoFalse ' Formatni majburlab to'g'irlash uchun
+                    .Width = imgWidth
+                    .Height = imgHeight
+                    
+                    ' Matematik hisob-kitob (0, 1, 2, 3 indekslar uchun)
+                    ' 1-rasm (0): Left=0, Top=0
+                    ' 2-rasm (1): Left=1, Top=0
+                    ' 3-rasm (2): Left=0, Top=1
+                    ' 4-rasm (3): Left=1, Top=1
+                    
+                    ' Gorizontal joylashuv (Juft/Toq)
+                    If (picCount Mod 2) = 0 Then
+                        .Left = startLeft
+                    Else
+                        .Left = startLeft + imgWidth + 5 ' 5 point oraliq (gap)
+                    End If
+                    
+                    ' Vertikal joylashuv (0-1 -> tepa, 2-3 -> past)
+                    If picCount < 2 Then
+                        .Top = startTop
+                    Else
+                        .Top = startTop + imgHeight + 5 ' 5 point oraliq (gap)
+                    End If
+                    
+                    ' Chiroyli ko'rinishi uchun ramka (ixtiyoriy)
+                    .Line.Visible = msoTrue
+                    .Line.Weight = 1
+                    .Line.ForeColor.RGB = RGB(0, 0, 0)
+                End With
+                
+                picCount = picCount + 1
+                If picCount >= 4 Then Exit For ' Maksimum 4 ta rasm
+            End If
+        Next shp
+    End If
 End Sub
