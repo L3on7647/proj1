@@ -6,7 +6,7 @@
 #End If
 ' ------------------
 
-Sub PasportAniqRasmli()
+Sub PasportTezkor()
     Dim pptApp As Object
     Dim targetPres As Object, sourcePres As Object
     Dim pptSlide As Object
@@ -23,6 +23,9 @@ Sub PasportAniqRasmli()
     Set excelSheet = ThisWorkbook.Sheets("TABLE")
     ' ==============================================
 
+    ' Ekranni yangilashni o'chiramiz (Tezlik uchun)
+    Application.ScreenUpdating = False
+
     On Error Resume Next
     Set pptApp = GetObject(, "PowerPoint.Application")
     If Err.Number <> 0 Then Set pptApp = CreateObject("PowerPoint.Application")
@@ -35,7 +38,7 @@ Sub PasportAniqRasmli()
     lastRow = excelSheet.Cells(excelSheet.Rows.Count, 1).End(xlUp).Row
 
     For i = 2 To lastRow
-        DoEvents ' Excel qotib qolmasligi uchun
+        DoEvents ' Tizim qotib qolmasligi uchun minimal imkoniyat
         
         ' 1. Slayd yaratish
         targetPres.Slides(1).Duplicate
@@ -45,7 +48,7 @@ Sub PasportAniqRasmli()
         For Each shp In pptSlide.Shapes
             If shp.HasTable Then
                 Set tbl = shp.Table
-                ' Jadval kataklarini to'ldirish
+                ' Ma'lumotlarni tez yozish
                 tbl.Cell(1, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 1).Value
                 tbl.Cell(2, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 2).Value
                 tbl.Cell(3, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 3).Value
@@ -56,6 +59,7 @@ Sub PasportAniqRasmli()
                 tbl.Cell(8, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 8).Value
                 tbl.Cell(9, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 9).Value
                 tbl.Cell(10, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 10).Value
+                Exit For ' Jadval topildimi? Bo'ldi, chiqib ketamiz (Vaqtni tejash)
             End If
         Next shp
         
@@ -72,16 +76,17 @@ Sub PasportAniqRasmli()
         If isFound Then
             excelSheet.Cells(i, 12).Value = "OK"
         Else
-            excelSheet.Cells(i, 12).Value = "Rasm Topilmadi"
+            excelSheet.Cells(i, 12).Value = "Yo'q"
         End If
         
         pptSlide.MoveTo toPos:=targetPres.Slides.Count
     Next i
 
-    MsgBox "Jarayon tugadi!", vbInformation
+    Application.ScreenUpdating = True
+    MsgBox "Tayyor! Tezlatilgan rejimda tugadi.", vbInformation
 End Sub
 
-' --- QAT'IY QIDIRUV FUNKSIYASI ---
+' --- TEZKOR QIDIRUV FUNKSIYASI ---
 Function RasmlarniTopVaJoyla(sourcePres As Object, targetSlide As Object, cleanVin As String) As Boolean
     Dim sld As Object
     Dim shp As Object
@@ -91,7 +96,7 @@ Function RasmlarniTopVaJoyla(sourcePres As Object, targetSlide As Object, cleanV
     Dim slideText As String
     Dim r As Long, c As Long
     
-    ' O'lchamlar (9x6.86 sm)
+    ' O'lchamlar
     Dim imgWidth As Double: imgWidth = 255
     Dim imgHeight As Double: imgHeight = 194.5
     Dim startLeft As Double: startLeft = 360
@@ -100,72 +105,67 @@ Function RasmlarniTopVaJoyla(sourcePres As Object, targetSlide As Object, cleanV
     Set foundSlide = Nothing
     RasmlarniTopVaJoyla = False
     
-    ' 1. SLAYDNI QIDIRISH (Jadvallar ichidan ham qidiradi, lekin ko'chirmaydi)
+    ' 1. SLAYDNI QIDIRISH
     For Each sld In sourcePres.Slides
         For Each shp In sld.Shapes
             
-            ' A) Oddiy matnlarda qidirish
+            ' A) Oddiy matn
             If shp.HasTextFrame Then
                 If shp.TextFrame.HasText Then
-                    slideText = Replace(shp.TextFrame.TextRange.Text, " ", "")
-                    If InStr(1, slideText, cleanVin, vbTextCompare) > 0 Then
-                        Set foundSlide = sld
-                        Exit For
+                    ' Replace funksiyasi ozgina vaqt oladi, shuning uchun avval InStr bilan tekshiramiz
+                    If InStr(1, shp.TextFrame.TextRange.Text, cleanVin, vbTextCompare) > 0 Then ' Probeli bilan bo'lsa ham topsin
+                         Set foundSlide = sld
+                         Exit For
+                    Else ' Agar topilmasa, probelsiz variantni tekshiramiz
+                        slideText = Replace(shp.TextFrame.TextRange.Text, " ", "")
+                        If InStr(1, slideText, cleanVin, vbTextCompare) > 0 Then
+                            Set foundSlide = sld
+                            Exit For
+                        End If
                     End If
                 End If
             End If
             
-            ' B) Jadval ichidan qidirish (Sizdagi VIN jadvalda bo'lishi mumkin)
+            ' B) Jadval ichi
             If shp.HasTable Then
+                ' Jadval ichini tekshirish sekin ishlashi mumkin, shuning uchun faqat kerak bo'lsa
                 For r = 1 To shp.Table.Rows.Count
                     For c = 1 To shp.Table.Columns.Count
                          If shp.Table.Cell(r, c).Shape.TextFrame.HasText Then
-                            slideText = Replace(shp.Table.Cell(r, c).Shape.TextFrame.TextRange.Text, " ", "")
-                            If InStr(1, slideText, cleanVin, vbTextCompare) > 0 Then
+                            If InStr(1, shp.Table.Cell(r, c).Shape.TextFrame.TextRange.Text, cleanVin, vbTextCompare) > 0 Then
                                 Set foundSlide = sld
                                 Exit For
                             End If
                          End If
                     Next c
+                    If Not foundSlide Is Nothing Then Exit For
                 Next r
             End If
         Next shp
         If Not foundSlide Is Nothing Then Exit For
     Next sld
     
-    ' 2. RASMLARNI KO'CHIRISH (Endi faqat va faqat rasmni oladi)
+    ' 2. RASMLARNI KO'CHIRISH (TEZKOR)
     If Not foundSlide Is Nothing Then
         RasmlarniTopVaJoyla = True
         picCount = 0
         
         For Each shp In foundSlide.Shapes
-            Dim isRealImage As Boolean
-            isRealImage = False
+            ' JADVALNI ANIQLASH VA O'TKAZIB YUBORISH
+            If shp.HasTable Then GoTo Keyingi
+            If shp.HasTextFrame Then GoTo Keyingi
             
-            ' --- FILTR (Eng muhim joyi) ---
-            
-            ' 1. Agar JADVAL bo'lsa -> O'tib ketamiz (Ko'chirmaymiz)
-            If shp.HasTable Then GoTo KeyingiShakl
-            
-            ' 2. Agar YOZUV (Text Box) bo'lsa -> O'tib ketamiz
-            If shp.HasTextFrame Then GoTo KeyingiShakl
-            
-            ' 3. Faqat "Picture" (13) turini olamiz
-            If shp.Type = 13 Then 
-                isRealImage = True
-            End If
-            
-            ' 4. Yoki "Picture Placeholder" (14) bo'lsa va ichida rasm bo'lsa
+            ' Faqat Rasm turlarini ajratish
+            Dim isPic As Boolean: isPic = False
+            If shp.Type = 13 Then isPic = True
             If shp.Type = 14 Then
-                ' 18 = ppPlaceholderPicture
-                If shp.PlaceholderFormat.ContainedType = 18 Then isRealImage = True
+                If shp.PlaceholderFormat.ContainedType = 18 Then isPic = True
             End If
 
-            ' --- NUSXA OLISH ---
-            If isRealImage = True Then
+            If isPic Then
                 shp.Copy
-                DoEvents
-                Sleep 300 ' Buferga tushishini kutish
+                ' Sleep vaqtini minimal qildim (faqat buferga tushish uchun yetarli)
+                Sleep 50 
                 
                 On Error Resume Next
                 targetSlide.Shapes.Paste
@@ -173,7 +173,6 @@ Function RasmlarniTopVaJoyla(sourcePres As Object, targetSlide As Object, cleanV
                 If Err.Number = 0 Then
                     Set newPic = targetSlide.Shapes(targetSlide.Shapes.Count)
                     
-                    ' Formatlash
                     With newPic
                         .LockAspectRatio = msoFalse
                         .Width = imgWidth
@@ -197,8 +196,7 @@ Function RasmlarniTopVaJoyla(sourcePres As Object, targetSlide As Object, cleanV
                 
                 If picCount >= 4 Then Exit For
             End If
-            
-KeyingiShakl:
+Keyingi:
         Next shp
     End If
 End Function
