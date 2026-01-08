@@ -1,4 +1,4 @@
-Sub PasportMaksimalTezlik()
+Sub PasportTurboRejim()
     Dim pptApp As Object
     Dim targetPres As Object, sourcePres As Object
     Dim pptSlide As Object
@@ -7,7 +7,10 @@ Sub PasportMaksimalTezlik()
     Dim targetPath As String, sourcePath As String
     Dim shp As Object, tbl As Object
     Dim vinCode As String
-    Dim isFound As Boolean
+    Dim slideMap As Object ' Xotira uchun lug'at
+    Dim vinKey As String, cleanText As String
+    Dim sld As Object
+    Dim r As Long, c As Long
     
     ' ================= SOZLAMALAR =================
     targetPath = "C:\Users\User\Desktop\Паспорт шаблон (002) (002).pptx"
@@ -15,24 +18,68 @@ Sub PasportMaksimalTezlik()
     Set excelSheet = ThisWorkbook.Sheets("TABLE")
     ' ==============================================
 
-    ' Ekranni yangilashni o'chiramiz (Tezlik uchun)
+    ' 1. TEZLIKNI OSHIRISH UCHUN EKRANNI O'CHIRISH
     Application.ScreenUpdating = False
+    Application.Calculation = xlCalculationManual ' Excel hisob-kitobini to'xtatish
 
     On Error Resume Next
     Set pptApp = GetObject(, "PowerPoint.Application")
     If Err.Number <> 0 Then Set pptApp = CreateObject("PowerPoint.Application")
     On Error GoTo 0
     pptApp.Visible = True
+    ' PowerPoint oynasini kichraytirib qo'yamiz (Grafika chizishga vaqt ketmasin)
+    pptApp.WindowState = 2 ' ppWindowMinimized
     
     Set targetPres = pptApp.Presentations.Open(targetPath)
     Set sourcePres = pptApp.Presentations.Open(sourcePath)
     
     lastRow = excelSheet.Cells(excelSheet.Rows.Count, 1).End(xlUp).Row
 
+    ' ---------------------------------------------------------
+    ' 2. BAZANI INDEKSLASH (Eng muhim qism - Xotiraga olish)
+    ' ---------------------------------------------------------
+    Set slideMap = CreateObject("Scripting.Dictionary")
+    
+    ' Donor fayldagi har bir slaydni bir marta o'qib chiqamiz
+    For Each sld In sourcePres.Slides
+        For Each shp In sld.Shapes
+            cleanText = ""
+            
+            ' Matnni o'qish
+            If shp.HasTextFrame Then
+                If shp.TextFrame.HasText Then
+                    cleanText = Replace(Trim(shp.TextFrame.TextRange.Text), " ", "")
+                End If
+            End If
+            
+            ' Jadvalni o'qish
+            If shp.HasTable Then
+                 ' Jadvalning faqat birinchi katagida VIN bo'lsa, tezroq bo'ladi
+                 ' Agar hammasini tekshirish shart bo'lsa, for loop qoladi
+                 For r = 1 To shp.Table.Rows.Count
+                    For c = 1 To shp.Table.Columns.Count
+                        If shp.Table.Cell(r, c).Shape.TextFrame.HasText Then
+                            cleanText = Replace(Trim(shp.Table.Cell(r, c).Shape.TextFrame.TextRange.Text), " ", "")
+                            If Len(cleanText) > 5 Then Exit For ' Topilsa chiqamiz
+                        End If
+                    Next c
+                    If Len(cleanText) > 5 Then Exit For
+                 Next r
+            End If
+            
+            ' Agar matn VIN kodga o'xshasa (uzunligi 5 dan katta), lug'atga yozamiz
+            If Len(cleanText) > 5 Then
+                If Not slideMap.Exists(cleanText) Then
+                    slideMap.Add cleanText, sld.SlideIndex
+                End If
+            End If
+        Next shp
+    Next sld
+
+    ' ---------------------------------------------------------
+    ' 3. ASOSIY SIKL (Endi qidirmaydi, to'g'ri ko'chiradi)
+    ' ---------------------------------------------------------
     For i = 2 To lastRow
-        ' DoEvents bu yerda qoldirildi, lekin u vaqt olmaydi, 
-        ' shunchaki Excel qotib qolmasligini ta'minlaydi.
-        DoEvents 
         
         ' 1. Slayd yaratish
         targetPres.Slides(1).Duplicate
@@ -52,157 +99,103 @@ Sub PasportMaksimalTezlik()
                 tbl.Cell(8, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 8).Value
                 tbl.Cell(9, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 9).Value
                 tbl.Cell(10, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 10).Value
-                Exit For ' Topdimi? Bo'ldi, chiqib ketamiz
+                Exit For
             End If
         Next shp
         
-        ' 3. VIN kodni tozalash
+        ' 3. VIN orqali rasmni "shartta" topish
         vinCode = Replace(Trim(excelSheet.Cells(i, 11).Value), " ", "")
         
-        ' 4. Rasmlarni qidirish
-        isFound = False
         If Len(vinCode) > 3 Then
-            isFound = RasmlarniTopVaJoyla(sourcePres, pptSlide, vinCode)
-        End If
-        
-        If isFound Then
-            excelSheet.Cells(i, 12).Value = "OK"
-        Else
-            excelSheet.Cells(i, 12).Value = "Yo'q"
+            ' Lug'atdan qaraymiz: Bu VIN bormi?
+            If slideMap.Exists(vinCode) Then
+                ' Bor bo'lsa, o'sha slayd raqamini olamiz
+                Dim sourceIndex As Integer
+                sourceIndex = slideMap(vinCode)
+                
+                ' O'sha slaydga murojaat qilamiz
+                Call RasmlarniKo'chir(sourcePres.Slides(sourceIndex), pptSlide)
+                excelSheet.Cells(i, 12).Value = "OK"
+            Else
+                excelSheet.Cells(i, 12).Value = "Yo'q"
+            End If
         End If
         
         pptSlide.MoveTo toPos:=targetPres.Slides.Count
     Next i
 
+    ' Sozlamalarni joyiga qaytarish
+    pptApp.WindowState = 1 ' ppWindowNormal
     Application.ScreenUpdating = True
-    MsgBox "Tayyor! Sleepsiz rejimda tugadi.", vbInformation
+    Application.Calculation = xlCalculationAutomatic
+    
+    MsgBox "Tayyor! Turbo rejim tugadi.", vbInformation
 End Sub
 
-' --- ENG TEZKOR QIDIRUV FUNKSIYASI ---
-Function RasmlarniTopVaJoyla(sourcePres As Object, targetSlide As Object, cleanVin As String) As Boolean
-    Dim sld As Object
-    Dim shp As Object
-    Dim foundSlide As Object
+' --- KO'CHIRISH FUNKSIYASI (Sleepsiz va Xavfsiz) ---
+Sub RasmlarniKo'chir(sourceSld As Object, targetSld As Object)
+    Dim shp As Object, newPic As Object
     Dim picCount As Integer
-    Dim newPic As Object
-    Dim slideText As String
-    Dim r As Long, c As Long
-    Dim retryCount As Integer
-    
-    ' O'lchamlar
     Dim imgWidth As Double: imgWidth = 255
     Dim imgHeight As Double: imgHeight = 194.5
     Dim startLeft As Double: startLeft = 360
     Dim startTop As Double: startTop = 80
+    Dim retry As Long
     
-    Set foundSlide = Nothing
-    RasmlarniTopVaJoyla = False
+    picCount = 0
     
-    ' 1. QIDIRUV (OPTIMAL)
-    For Each sld In sourcePres.Slides
-        For Each shp In sld.Shapes
-            ' A) Oddiy matn
-            If shp.HasTextFrame Then
-                If shp.TextFrame.HasText Then
-                    If InStr(1, shp.TextFrame.TextRange.Text, cleanVin, vbTextCompare) > 0 Then
-                         Set foundSlide = sld
-                         Exit For
-                    End If
-                    ' Agar topilmasa, replace qilib ko'ramiz
-                    slideText = Replace(shp.TextFrame.TextRange.Text, " ", "")
-                    If InStr(1, slideText, cleanVin, vbTextCompare) > 0 Then
-                        Set foundSlide = sld
-                        Exit For
-                    End If
-                End If
-            End If
-            
-            ' B) Jadval (Agar kerak bo'lsa)
-            If shp.HasTable Then
-                 ' Jadval ichini tekshirish sekin bo'lsa, buni o'chirib qo'yish mumkin
-                 ' Lekin aniqlik uchun qoldirdim
-                For r = 1 To shp.Table.Rows.Count
-                    For c = 1 To shp.Table.Columns.Count
-                         If shp.Table.Cell(r, c).Shape.TextFrame.HasText Then
-                            If InStr(1, shp.Table.Cell(r, c).Shape.TextFrame.TextRange.Text, cleanVin, vbTextCompare) > 0 Then
-                                Set foundSlide = sld
-                                Exit For
-                            End If
-                         End If
-                    Next c
-                    If Not foundSlide Is Nothing Then Exit For
-                Next r
-            End If
-        Next shp
-        If Not foundSlide Is Nothing Then Exit For
-    Next sld
-    
-    ' 2. KO'CHIRISH (SLEEPSIZ, LEKIN "RETRY" BILAN)
-    If Not foundSlide Is Nothing Then
-        RasmlarniTopVaJoyla = True
-        picCount = 0
+    For Each shp In sourceSld.Shapes
+        ' JADVAL VA MATNNI BLOKLASH
+        If shp.HasTable Then GoTo SkipShape
+        If shp.HasTextFrame Then GoTo SkipShape
         
-        For Each shp In foundSlide.Shapes
-            ' Filtrlash: Jadval va Matnlarni olmaymiz
-            If shp.HasTable Then GoTo Keyingi
-            If shp.HasTextFrame Then GoTo Keyingi
-            
-            ' Rasm yoki Konteyner ekanligini tekshirish
-            Dim isPic As Boolean: isPic = False
-            If shp.Type = 13 Then isPic = True
-            If shp.Type = 14 Then
-                If shp.PlaceholderFormat.ContainedType = 18 Then isPic = True
-            End If
+        ' Faqat Rasm (13) yoki Rasm Konteyneri (14->18)
+        Dim isPic As Boolean: isPic = False
+        If shp.Type = 13 Then isPic = True
+        If shp.Type = 14 Then
+            If shp.PlaceholderFormat.ContainedType = 18 Then isPic = True
+        End If
 
-            If isPic Then
-                ' --- COPY ---
-                shp.Copy
-                DoEvents ' Operatsion tizimga buferni qabul qilishga ruxsat beramiz
-                
-                ' --- PASTE (Qayta urinish bilan) ---
-                On Error Resume Next
-                targetSlide.Shapes.Paste
-                
-                ' Agar Paste o'xshamasa (chunki Sleep yo'q), 
-                ' yana 3 marta urinib ko'ramiz (bu 500ms kutishdan tezroq)
-                If Err.Number <> 0 Then
-                    Err.Clear
+        If isPic Then
+            shp.Copy
+            ' Sleep yo'q, lekin Paste xato bersa qayta urinamiz
+            
+            On Error Resume Next
+            targetSld.Shapes.Paste
+            
+            ' Agar xato bersa (Copy ulgurmasa), sikl bilan kutamiz (bu Sleepdan tezroq)
+            If Err.Number <> 0 Then
+                Err.Clear
+                For retry = 1 To 1000 ' Mikrosekundlik kutish
                     DoEvents
-                    targetSlide.Shapes.Paste ' 2-urinish
-                    If Err.Number <> 0 Then
-                         Err.Clear
-                         DoEvents
-                         targetSlide.Shapes.Paste ' 3-urinish
-                    End If
-                End If
-                
-                ' Agar baribir xato bo'lsa, tashlab ketamiz
-                If Err.Number = 0 Then
-                    Set newPic = targetSlide.Shapes(targetSlide.Shapes.Count)
-                    With newPic
-                        .LockAspectRatio = msoFalse
-                        .Width = imgWidth
-                        .Height = imgHeight
-                        
-                        If (picCount Mod 2) = 0 Then
-                            .Left = startLeft
-                        Else
-                            .Left = startLeft + imgWidth + 5
-                        End If
-                        
-                        If picCount < 2 Then
-                            .Top = startTop
-                        Else
-                            .Top = startTop + imgHeight + 5
-                        End If
-                    End With
-                    picCount = picCount + 1
-                End If
-                On Error GoTo 0
-                
-                If picCount >= 4 Then Exit For
+                    targetSld.Shapes.Paste
+                    If Err.Number = 0 Then Exit For
+                Next retry
             End If
-Keyingi:
-        Next shp
-    End If
-End Function
+            
+            If Err.Number = 0 Then
+                Set newPic = targetSld.Shapes(targetSld.Shapes.Count)
+                With newPic
+                    .LockAspectRatio = msoFalse
+                    .Width = imgWidth
+                    .Height = imgHeight
+                    If (picCount Mod 2) = 0 Then
+                        .Left = startLeft
+                    Else
+                        .Left = startLeft + imgWidth + 5
+                    End If
+                    If picCount < 2 Then
+                        .Top = startTop
+                    Else
+                        .Top = startTop + imgHeight + 5
+                    End If
+                End With
+                picCount = picCount + 1
+            End If
+            On Error GoTo 0
+            
+            If picCount >= 4 Then Exit Sub
+        End If
+SkipShape:
+    Next shp
+End Sub
