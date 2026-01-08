@@ -1,157 +1,109 @@
-Sub DamasKirillcha_Unicode()
-    Dim srcSlide As Slide
-    Dim newSlide As Slide
-    Dim shp As Shape
-    Dim picColl As New Collection
-    Dim i As Integer
+Sub PowerPointgaPasportYaratis()
+    Dim pptApp As Object
+    Dim pptPres As Object
+    Dim pptSlide As Object
+    Dim pptShape As Object
+    Dim excelSheet As Worksheet
+    Dim lastRow As Long
+    Dim i As Long
+    Dim pptPath As String
+    Dim shablonSlideIndex As Integer
     
-    ' O'zbek harflari uchun maxsus o'zgaruvchilar
-    Dim tHeader As String
-    Dim tKeeper As String, tPropName As String, tAddress As String
-    Dim tArea As String, tDesc As String, tComm As String
-    Dim tState As String, tDate As String, tValue As String
-    Dim tGood As String
+    ' --- SOZLAMALAR ---
+    ' PowerPoint shabloningiz joylashgan to'liq manzilni shu yerga yozing:
+    pptPath = "C:\Users\User\Desktop\Паспорт шаблон (002) (002).pptx" 
     
-    ' --- SO'ZLARNI KOD ORQALI YASASH (Soroqcha bo'lmasligi uchun) ---
-    ' ОБЪЕКТ ПАСПОРТИ
-    tHeader = ChrW(1054) & ChrW(1041) & ChrW(1066) & ChrW(1045) & ChrW(1050) & ChrW(1058) & " " & ChrW(1055) & ChrW(1040) & ChrW(1057) & ChrW(1055) & ChrW(1054) & ChrW(1056) & ChrW(1058) & ChrW(1048)
-    
-    ' Балансда сақловчи ("қ" - 1179)
-    tKeeper = ChrW(1041) & ChrW(1072) & ChrW(1083) & ChrW(1072) & ChrW(1085) & ChrW(1089) & ChrW(1076) & ChrW(1072) & " " & ChrW(1089) & ChrW(1072) & ChrW(1179) & ChrW(1083) & ChrW(1086) & ChrW(1074) & ChrW(1095) & ChrW(1080)
-    
-    ' Мулк номи
-    tPropName = ChrW(1052) & ChrW(1091) & ChrW(1083) & ChrW(1082) & " " & ChrW(1085) & ChrW(1086) & ChrW(1084) & ChrW(1080)
-    
-    ' Манзили
-    tAddress = ChrW(1052) & ChrW(1072) & ChrW(1085) & ChrW(1079) & ChrW(1080) & ChrW(1083) & ChrW(1080)
-    
-    ' Майдони
-    tArea = ChrW(1052) & ChrW(1072) & ChrW(1081) & ChrW(1076) & ChrW(1086) & ChrW(1085) & ChrW(1080)
-    
-    ' Тавсифи
-    tDesc = ChrW(1058) & ChrW(1072) & ChrW(1074) & ChrW(1089) & ChrW(1080) & ChrW(1092) & ChrW(1080)
-    
-    ' Коммуникация
-    tComm = ChrW(1050) & ChrW(1086) & ChrW(1084) & ChrW(1084) & ChrW(1091) & ChrW(1085) & ChrW(1080) & ChrW(1082) & ChrW(1072) & ChrW(1094) & ChrW(1080) & ChrW(1103)
-    
-    ' Ҳолати ("Ҳ" - 1206)
-    tState = ChrW(1206) & ChrW(1086) & ChrW(1083) & ChrW(1072) & ChrW(1090) & ChrW(1080)
-    
-    ' Балансга олинган сана
-    tDate = ChrW(1041) & ChrW(1072) & ChrW(1083) & ChrW(1072) & ChrW(1085) & ChrW(1089) & ChrW(1075) & ChrW(1072) & " " & ChrW(1086) & ChrW(1083) & ChrW(1080) & ChrW(1085) & ChrW(1075) & ChrW(1072) & ChrW(1085) & " " & ChrW(1089) & ChrW(1072) & ChrW(1085) & ChrW(1072)
-    
-    ' Баланс қиймати ("қ" - 1179)
-    tValue = ChrW(1041) & ChrW(1072) & ChrW(1083) & ChrW(1072) & ChrW(1085) & ChrW(1089) & " " & ChrW(1179) & ChrW(1080) & ChrW(1081) & ChrW(1084) & ChrW(1072) & ChrW(1090) & ChrW(1080)
-    
-    ' Қониқарли ("Қ" - 1178, "қ" - 1179)
-    tGood = ChrW(1178) & ChrW(1086) & ChrW(1085) & ChrW(1080) & ChrW(1179) & ChrW(1072) & ChrW(1088) & ChrW(1083) & ChrW(1080)
+    ' Excel varaq nomi (Sizdagi rasmda "TABLE" deb yozilgan ekan)
+    Set excelSheet = ThisWorkbook.Sheets("TABLE")
+    shablonSlideIndex = 1 ' Nusxa olinadigan shablon slayd raqami
+    ' ------------------
 
-
-    ' 1. Slaydni aniqlash
-    Set srcSlide = ActiveWindow.View.Slide
-    
-    ' 2. Rasmlarni yig'ish
-    For Each shp In srcSlide.Shapes
-        If shp.Type = msoPicture Or shp.Type = msoLinkedPicture Then
-            picColl.Add shp
-        ElseIf shp.Type = msoPlaceholder Then
-            If shp.PlaceholderFormat.ContainedType = msoPicture Then picColl.Add shp
-        ElseIf shp.Type = msoGroup Then
-            Dim subShp As Shape
-            For Each subShp In shp.GroupItems
-                If subShp.Type = msoPicture Then picColl.Add subShp
-            Next subShp
-        End If
-    Next shp
-    
-    If picColl.Count = 0 Then
-        MsgBox "Rasm topilmadi!", vbExclamation
+    ' Fayl borligini tekshirish
+    If Dir(pptPath) = "" Then
+        MsgBox "PowerPoint fayli topilmadi! Manzilni tekshiring.", vbCritical
         Exit Sub
     End If
 
-    ' 3. YANGI SLAYD
-    Set newSlide = ActivePresentation.Slides.Add(srcSlide.SlideIndex + 1, ppLayoutBlank)
+    ' PowerPointni ochish
+    On Error Resume Next
+    Set pptApp = GetObject(, "PowerPoint.Application")
+    If Err.Number <> 0 Then
+        Set pptApp = CreateObject("PowerPoint.Application")
+    End If
+    On Error GoTo 0
     
-    ' --- SARLAVHA ---
-    Dim titleBox As Shape
-    Set titleBox = newSlide.Shapes.AddTextbox(msoTextOrientationHorizontal, 0, 20, 960, 50)
-    With titleBox
-        .Fill.ForeColor.RGB = RGB(141, 180, 226)
-        .TextFrame.TextRange.Text = tHeader ' ОБЪЕКТ ПАСПОРТИ
-        .TextFrame.TextRange.Font.Name = "Calibri"
-        .TextFrame.TextRange.Font.Bold = msoTrue
-        .TextFrame.TextRange.Font.Size = 28
-        .TextFrame.TextRange.Font.Color.RGB = RGB(255, 255, 255)
-        .TextFrame.TextRange.ParagraphFormat.Alignment = ppAlignCenter
-        .TextFrame.VerticalAnchor = msoAnchorMiddle
-    End With
-    
-    ' --- JADVAL ---
-    Dim tbl As Shape
-    Set tbl = newSlide.Shapes.AddTable(9, 2, 30, 90, 420, 400)
-    With tbl.Table
-        .Columns(1).Width = 160 ' Ustunni sal kengaytirdim so'zlar sig'ishi uchun
-        .Columns(2).Width = 260
-        
-        SetCellText tbl.Table, 1, 1, tKeeper   ' Балансда сақловчи
-        SetCellText tbl.Table, 2, 1, tPropName ' Мулк номи
-        SetCellText tbl.Table, 3, 1, tAddress  ' Манзили
-        SetCellText tbl.Table, 4, 1, tArea     ' Майдони
-        SetCellText tbl.Table, 5, 1, tDesc     ' Тавсифи
-        SetCellText tbl.Table, 6, 1, tComm     ' Коммуникация
-        SetCellText tbl.Table, 7, 1, tState    ' Ҳолати
-        SetCellText tbl.Table, 8, 1, tDate     ' Балансга олинган сана
-        SetCellText tbl.Table, 9, 1, tValue    ' Баланс қиймати
-        
-        SetCellText tbl.Table, 7, 2, tGood     ' Қониқарли
-        
-        .ApplyStyle "{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}"
-    End With
+    pptApp.Visible = True
+    Set pptPres = pptApp.Presentations.Open(pptPath)
 
-    ' --- RASMLAR (Damas Stilida) ---
-    Dim imgW As Single, imgH As Single
-    Dim startX As Single, startY As Single
-    Dim gap As Single
-    Dim r As Integer, c As Integer
-    Dim newPic As ShapeRange
-    
-    startX = 470
-    startY = 90
-    imgW = 230
-    imgH = 160
-    gap = 5
-    
-    For i = 1 To picColl.Count
-        If i > 4 Then Exit For
+    ' Exceldagi oxirgi qatorni topish
+    lastRow = excelSheet.Cells(excelSheet.Rows.Count, 1).End(xlUp).Row
+
+    ' --- SIKL BOSHLANDI ---
+    ' 2-qatordan boshlab oxirigacha aylanamiz
+    For i = 2 To lastRow
         
-        picColl(i).Copy
-        Set newPic = newSlide.Shapes.Paste
+        ' 1. Shablon slayddan nusxa olish
+        pptPres.Slides(shablonSlideIndex).Duplicate
         
-        r = (i - 1) \ 2
-        c = (i - 1) Mod 2
+        ' 2. Yangi yaratilgan slayd bilan ishlash (u endi 2-raqamli bo'lib tushadi)
+        ' Biz har doim nusxani shablonSlideIndex + 1 joyiga qo'shamiz
+        Set pptSlide = pptPres.Slides(shablonSlideIndex + 1)
         
-        With newPic
-            .LockAspectRatio = msoTrue
-            .Width = imgW
-            If .Height > imgH Then
-                .PictureFormat.CropBottom = .Height - imgH
-            End If
-            
-            .Left = startX + (c * (imgW + gap))
-            .Top = startY + (r * (imgH + gap))
-            
-            .Line.Visible = msoTrue
-            .Line.ForeColor.RGB = RGB(255, 255, 255)
-            .Line.Weight = 3
-        End With
+        ' 3. Ma'lumotlarni almashtirish (Find/Replace)
+        ' Bu funksiya kirilchani buzmaydi, chunki o'zgaruvchilar to'g'ridan-to'g'ri
+        ' Excel katagidan (Value) olinadi.
+        
+        Call TextAlmashtir(pptSlide, "{SAQLOVCHI}", excelSheet.Cells(i, 1).Value) ' A ustun
+        Call TextAlmashtir(pptSlide, "{NOM}", excelSheet.Cells(i, 2).Value)       ' B ustun
+        Call TextAlmashtir(pptSlide, "{MANZIL}", excelSheet.Cells(i, 3).Value)    ' C ustun
+        Call TextAlmashtir(pptSlide, "{MAYDON}", excelSheet.Cells(i, 4).Value)    ' D ustun
+        Call TextAlmashtir(pptSlide, "{TAVSIF}", excelSheet.Cells(i, 5).Value)    ' E ustun
+        Call TextAlmashtir(pptSlide, "{KOM}", excelSheet.Cells(i, 6).Value)       ' F ustun
+        Call TextAlmashtir(pptSlide, "{HOLAT}", excelSheet.Cells(i, 7).Value)     ' G ustun
+        Call TextAlmashtir(pptSlide, "{SANA}", excelSheet.Cells(i, 8).Value)      ' H ustun
+        Call TextAlmashtir(pptSlide, "{QIYMAT}", excelSheet.Cells(i, 9).Value)    ' I ustun
+        Call TextAlmashtir(pptSlide, "{SHART}", excelSheet.Cells(i, 10).Value)    ' J ustun
+        
+        ' Slaydni oxiriga ko'chiramiz (tartib buzilmasligi uchun)
+        pptSlide.MoveTo toPos:=pptPres.Slides.Count
+        
     Next i
-    
-    MsgBox "Tayyor!", vbInformation
+
+    MsgBox "Tayyor! " & (lastRow - 1) & " ta pasport yaratildi.", vbInformation
+
 End Sub
 
-Sub SetCellText(t As Table, r As Integer, c As Integer, txt As String)
-    t.Cell(r, c).Shape.TextFrame.TextRange.Text = txt
-    t.Cell(r, c).Shape.TextFrame.TextRange.Font.Name = "Calibri"
-    t.Cell(r, c).Shape.TextFrame.TextRange.Font.Size = 11
-    If c = 1 Then t.Cell(r, c).Shape.TextFrame.TextRange.Font.Bold = msoTrue
+' Yordamchi funksiya: Matnni almashtirish uchun
+Sub TextAlmashtir(slide As Object, findText As String, replaceText As String)
+    Dim shp As Object
+    Dim txtRng As Object
+    
+    ' Agar katak bo'sh bo'lsa, xatolik bermasligi uchun
+    If IsNull(replaceText) Then replaceText = ""
+    
+    For Each shp In slide.Shapes
+        If shp.HasTextFrame Then
+            If shp.TextFrame.HasText Then
+                Set txtRng = shp.TextFrame.TextRange
+                ' Katta-kichik harfga qaramay almashtiradi
+                txtRng.Replace FindWhat:=findText, _
+                               ReplaceWhat:=replaceText, _
+                               WholeWords:=False
+            End If
+        End If
+        
+        ' Agar guruhlangan shakllar bo'lsa (Group)
+        If shp.Type = 6 Then ' msoGroup
+            Dim subShp As Object
+            For Each subShp In shp.GroupItems
+                If subShp.HasTextFrame Then
+                    If subShp.TextFrame.HasText Then
+                        subShp.TextFrame.TextRange.Replace FindWhat:=findText, _
+                               ReplaceWhat:=replaceText, _
+                               WholeWords:=False
+                    End If
+                End If
+            Next subShp
+        End If
+    Next shp
 End Sub
