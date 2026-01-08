@@ -1,150 +1,86 @@
-Sub JadvalniKochirish_Zirhli()
+Sub RasmlarniFormatlash()
+    Dim currentSlide As Slide
+    Dim newSlide As Slide
     Dim shp As Shape
-    Dim srcTable As Table
-    Dim targetSlide As Slide
-    Dim targetTable As Table
+    Dim picCollection As New Collection
+    Dim i As Integer
+    Dim leftPos As Single, topPos As Single
+    Dim imgWidth As Single, imgHeight As Single
+    Dim col As Integer, row As Integer
     
-    Dim clientName As String
-    Dim carFullInfo As String
-    Dim carName As String
-    Dim balanceDate As String
-    Dim balanceValue As String
-    Dim lastCol As Integer
+    ' 1. Aktiv slaydni aniqlash
+    Set currentSlide = ActiveWindow.View.Slide
     
-    ' 1. JADVALNI TANLASHNI TEKSHIRISH
-    On Error Resume Next
-    If ActiveWindow.Selection.Type = ppSelectionNone Then
-        MsgBox "Jadval tanlanmagan! Iltimos, jadval ustiga bosing.", vbExclamation
+    ' 2. Slayddagi barcha rasmlarni yig'ib olish
+    For Each shp In currentSlide.Shapes
+        ' Agar shakl rasm bo'lsa yoki rasm ramkasi bo'lsa
+        If shp.Type = msoPicture Or shp.Type = msoLinkedPicture Then
+            picCollection.Add shp
+        End If
+    Next shp
+    
+    ' Agar rasm topilmasa
+    If picCollection.Count = 0 Then
+        MsgBox "Bu slaydda rasm topilmadi!", vbExclamation
         Exit Sub
     End If
     
-    ' Nima tanlangan bo'lsa ham (tekst yoki ramka), shape qilib olamiz
-    Set shp = ActiveWindow.Selection.ShapeRange(1)
-    If Err.Number <> 0 Then
-        MsgBox "Jadvalni to'g'ri tanlang!", vbCritical
-        Exit Sub
-    End If
+    ' 3. Yangi slayd ochish
+    Set newSlide = ActivePresentation.Slides.Add(currentSlide.SlideIndex + 1, ppLayoutBlank)
     
-    If Not shp.HasTable Then
-        MsgBox "Bu jadval emas!", vbCritical
-        Exit Sub
-    End If
-    Set srcTable = shp.Table
-    On Error GoTo 0
+    ' 4. Rasmlarni joylash parametrlari (O'ng tomon uchun)
+    ' Bu yerda koordinatalarni o'zgartirishingiz mumkin
+    Dim startX As Single: startX = 400 ' Chapdan qancha masofa (Tabledan keyin)
+    Dim startY As Single: startY = 50  ' Tepadan masofa
+    Dim gap As Single: gap = 10        ' Rasmlar orasidagi masofa
     
-    ' 2. MA'LUMOTLARNI XAVFSIZ OLISH (Safe Mode)
-    ' Xatolik chiqsa, bo'sh joy qaytaradigan funksiya ishlatamiz
+    ' Har bir rasm uchun o'lcham (taxminan 2-rasmdagi o'lcham)
+    imgWidth = 220
+    imgHeight = 150
     
-    lastCol = srcTable.Columns.Count
-    
-    ' A) MIJOZ NOMI (1-qator, 2-ustun). Agar xato bersa, 1-qator 1-ustunni oladi
-    clientName = GetSafeText(srcTable, 1, 2)
-    If clientName = "" Then clientName = GetSafeText(srcTable, 1, 1)
-    
-    ' B) MASHINA HAQIDA (6-qator, oxirgi ustun)
-    carFullInfo = GetSafeText(srcTable, 6, lastCol)
-    ' Agar oxirgi ustunda bo'lmasa, 2-ustunni tekshiramiz
-    If carFullInfo = "" Then carFullInfo = GetSafeText(srcTable, 6, 2)
-    
-    ' C) BALANS SANASI (7-qator)
-    balanceDate = GetSafeText(srcTable, 7, lastCol)
-    If balanceDate = "" Then balanceDate = GetSafeText(srcTable, 7, 2)
-    
-    ' D) BALANS QIYMATI (8-qator)
-    balanceValue = GetSafeText(srcTable, 8, lastCol)
-    If balanceValue = "" Then balanceValue = GetSafeText(srcTable, 8, 2)
-    
-    ' E) MULK NOMI (faqat birinchi qatorni ajratib olish)
-    carName = SafeSplit(carFullInfo)
-
-    ' 3. YANGI SLAYD
-    Set targetSlide = ActivePresentation.Slides.Add(ActiveWindow.View.Slide.SlideIndex + 1, ppLayoutBlank)
-    
-    ' Sarlavha
-    Dim titleBox As Shape
-    Set titleBox = targetSlide.Shapes.AddTextbox(msoTextOrientationHorizontal, 30, 20, 650, 40)
-    With titleBox
-        .Fill.ForeColor.RGB = RGB(141, 180, 226)
-        .TextFrame.TextRange.Text = "OBYEKT PASPORTI"
-        .TextFrame.TextRange.Font.Bold = msoTrue
-        .TextFrame.TextRange.ParagraphFormat.Alignment = ppAlignCenter
-        .TextFrame.VerticalAnchor = msoAnchorMiddle
-        .TextFrame.TextRange.Font.Size = 20
-        .TextFrame.TextRange.Font.Color.RGB = RGB(255, 255, 255)
-    End With
-
-    ' 4. YANGI JADVAL
-    Set shp = targetSlide.Shapes.AddTable(8, 2, 30, 70, 450, 350)
-    Set targetTable = shp.Table
-    
-    With targetTable
-        .Columns(1).Width = 140
-        .Columns(2).Width = 310
+    ' 5. Har bir rasmni ko'chirib, joylashtirish
+    For i = 1 To picCollection.Count
+        ' Rasmni nusxalash
+        picCollection(i).Copy
         
-        FillRow targetTable, 1, "Balansda saqlovchi", clientName, True
-        FillRow targetTable, 2, "Mulk nomi", carName
-        FillRow targetTable, 3, "Manzili", ""
-        FillRow targetTable, 4, "Maydoni", ""
-        FillRow targetTable, 5, "Tavsifi", carFullInfo
-        targetTable.Cell(5, 2).Shape.TextFrame.TextRange.Font.Size = 10
+        ' Yangi slaydga tashlash
+        Dim newPic As ShapeRange
+        Set newPic = newSlide.Shapes.Paste
         
-        FillRow targetTable, 6, "Holati", "Qoniqarli"
-        FillRow targetTable, 7, "Balansga olingan sana", balanceDate
-        FillRow targetTable, 8, "Balans qiymati", balanceValue
+        ' Joylashuvni hisoblash (2x2 matritsa)
+        ' i=1 -> Row 0, Col 0
+        ' i=2 -> Row 0, Col 1
+        ' i=3 -> Row 1, Col 0
+        ' i=4 -> Row 1, Col 1
         
-        .ApplyStyle "{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}"
-    End With
+        row = (i - 1) \ 2 ' Butun bo'lish (0 yoki 1)
+        col = (i - 1) Mod 2 ' Qoldiq (0 yoki 1)
+        
+        leftPos = startX + (col * (imgWidth + gap))
+        topPos = startY + (row * (imgHeight + gap))
+        
+        ' Rasmni joylash va o'lchamini to'g'irlash
+        With newPic
+            .LockAspectRatio = msoTrue ' Mashina shakli buzilmasligi uchun
+            .Width = imgWidth
+            ' Agar balandlik juda katta bo'lib ketsa, qirqamiz (Crop)
+            If .Height > imgHeight Then
+                .Height = imgHeight
+            End If
+            
+            .Left = leftPos
+            .Top = topPos
+            
+            ' Chiroyli ko'rinishi uchun ramka (ixtiyoriy)
+            .Line.Visible = msoTrue
+            .Line.ForeColor.RGB = RGB(200, 200, 200)
+            .Line.Weight = 1
+        End With
+        
+        ' Agar 4 tadan ko'p rasm bo'lsa, to'xtaymiz (dizayn buzilmasligi uchun)
+        If i >= 4 Then Exit For
+    Next i
     
-    MsgBox "Tayyor! Agar ba'zi kataklar bo'sh bo'lsa, demak eski jadvalda ular birlashgan (merged) bo'lgan.", vbInformation
-End Sub
+    MsgBox "Rasmlar yangi slaydga o'tkazildi!", vbInformation
 
-' --- XATOLIKDAN HIMOYALOVCHI FUNKSIYALAR ---
-
-Function GetSafeText(tbl As Table, r As Integer, c As Integer) As String
-    On Error Resume Next ' Xato bo'lsa indama
-    Dim txt As String
-    txt = ""
-    
-    ' Agar qator yoki ustun yo'q bo'lsa, kod sinmasin
-    If r > tbl.Rows.Count Or c > tbl.Columns.Count Then
-        GetSafeText = ""
-        Exit Function
-    End If
-    
-    txt = tbl.Cell(r, c).Shape.TextFrame.TextRange.Text
-    
-    ' Tozalash
-    txt = Replace(txt, Chr(13), vbCr)
-    txt = Replace(txt, Chr(7), "")
-    txt = Replace(txt, vbCr, " ") ' Enterlarni probelga aylantiramiz
-    GetSafeText = Trim(txt)
-    On Error GoTo 0
-End Function
-
-Function SafeSplit(txt As String) As String
-    On Error Resume Next
-    If txt = "" Then
-        SafeSplit = ""
-        Exit Function
-    End If
-    
-    Dim arr() As String
-    ' Chevrolet Cobalt so'zi odatda probel bilan ajralgan
-    ' Lekin matn uzun bo'lsa, birinchi 2-3 ta so'zni olamiz
-    arr = Split(txt, " ")
-    
-    If UBound(arr) >= 1 Then
-        SafeSplit = arr(0) & " " & arr(1)
-    ElseIf UBound(arr) = 0 Then
-        SafeSplit = arr(0)
-    Else
-        SafeSplit = txt
-    End If
-End Function
-
-Sub FillRow(tbl As Table, r As Integer, header As String, val As String, Optional isBold As Boolean = False)
-    On Error Resume Next
-    tbl.Cell(r, 1).Shape.TextFrame.TextRange.Text = header
-    tbl.Cell(r, 2).Shape.TextFrame.TextRange.Text = val
-    If isBold Then tbl.Cell(r, 2).Shape.TextFrame.TextRange.Font.Bold = msoTrue
 End Sub
