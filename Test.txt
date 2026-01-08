@@ -1,9 +1,8 @@
-Sub JadvalniKochirish_Final()
+Sub JadvalniKochirish_Zirhli()
     Dim shp As Shape
     Dim srcTable As Table
     Dim targetSlide As Slide
     Dim targetTable As Table
-    Dim sel As Selection
     
     Dim clientName As String
     Dim carFullInfo As String
@@ -12,54 +11,53 @@ Sub JadvalniKochirish_Final()
     Dim balanceValue As String
     Dim lastCol As Integer
     
-    ' 1. JADVALNI AQLLI TANLASH (Update)
-    Set sel = ActiveWindow.Selection
-    
-    ' Agar hech narsa tanlanmagan bo'lsa
-    If sel.Type = ppSelectionNone Then
-        MsgBox "Iltimos, avval 1-rasmdagi JADVALNI ustiga bosing!", vbExclamation
-        Exit Sub
-    End If
-    
-    ' Agar matn yoki shakl tanlangan bo'lsa, uning Jadval ekanligini tekshiramiz
+    ' 1. JADVALNI TANLASHNI TEKSHIRISH
     On Error Resume Next
-    If sel.Type = ppSelectionText Or sel.Type = ppSelectionShapes Then
-        Set shp = sel.ShapeRange(1)
-    Else
-        MsgBox "Jadval tanlanmadi. Sichqoncha bilan jadval ustiga bosing.", vbCritical
+    If ActiveWindow.Selection.Type = ppSelectionNone Then
+        MsgBox "Jadval tanlanmagan! Iltimos, jadval ustiga bosing.", vbExclamation
         Exit Sub
     End If
     
-    If shp.HasTable Then
-        Set srcTable = shp.Table
-    Else
-        MsgBox "Siz tanlagan narsa jadval emas! Iltimos, aniq jadvalni tanlang.", vbCritical
+    ' Nima tanlangan bo'lsa ham (tekst yoki ramka), shape qilib olamiz
+    Set shp = ActiveWindow.Selection.ShapeRange(1)
+    If Err.Number <> 0 Then
+        MsgBox "Jadvalni to'g'ri tanlang!", vbCritical
         Exit Sub
     End If
+    
+    If Not shp.HasTable Then
+        MsgBox "Bu jadval emas!", vbCritical
+        Exit Sub
+    End If
+    Set srcTable = shp.Table
     On Error GoTo 0
-
-    ' 2. MA'LUMOTLARNI SUG'URIB OLISH
+    
+    ' 2. MA'LUMOTLARNI XAVFSIZ OLISH (Safe Mode)
+    ' Xatolik chiqsa, bo'sh joy qaytaradigan funksiya ishlatamiz
+    
     lastCol = srcTable.Columns.Count
     
-    ' A) MIJOZ NOMI (Qidiruv: 1-qatorning barcha kataklarini tekshiramiz)
-    ' Ba'zan merged (birlashgan) bo'ladi, shuning uchun aniq katakni topish qiyin.
-    ' Biz 1-qatordagi birinchi uchragan uzun matnni olamiz.
-    clientName = GetCellText(srcTable, 1, 2) ' Odatda 2-ustunda bo'ladi
-    If Len(clientName) < 3 Then clientName = GetCellText(srcTable, 1, 1)
+    ' A) MIJOZ NOMI (1-qator, 2-ustun). Agar xato bersa, 1-qator 1-ustunni oladi
+    clientName = GetSafeText(srcTable, 1, 2)
+    If clientName = "" Then clientName = GetSafeText(srcTable, 1, 1)
     
     ' B) MASHINA HAQIDA (6-qator, oxirgi ustun)
-    carFullInfo = GetCellText(srcTable, 6, lastCol)
+    carFullInfo = GetSafeText(srcTable, 6, lastCol)
+    ' Agar oxirgi ustunda bo'lmasa, 2-ustunni tekshiramiz
+    If carFullInfo = "" Then carFullInfo = GetSafeText(srcTable, 6, 2)
     
     ' C) BALANS SANASI (7-qator)
-    balanceDate = GetCellText(srcTable, 7, lastCol)
+    balanceDate = GetSafeText(srcTable, 7, lastCol)
+    If balanceDate = "" Then balanceDate = GetSafeText(srcTable, 7, 2)
     
     ' D) BALANS QIYMATI (8-qator)
-    balanceValue = GetCellText(srcTable, 8, lastCol)
+    balanceValue = GetSafeText(srcTable, 8, lastCol)
+    If balanceValue = "" Then balanceValue = GetSafeText(srcTable, 8, 2)
     
     ' E) MULK NOMI (faqat birinchi qatorni ajratib olish)
-    carName = SplitLine(carFullInfo, 0)
+    carName = SafeSplit(carFullInfo)
 
-    ' 3. YANGI SLAYD YARATISH
+    ' 3. YANGI SLAYD
     Set targetSlide = ActivePresentation.Slides.Add(ActiveWindow.View.Slide.SlideIndex + 1, ppLayoutBlank)
     
     ' Sarlavha
@@ -75,7 +73,7 @@ Sub JadvalniKochirish_Final()
         .TextFrame.TextRange.Font.Color.RGB = RGB(255, 255, 255)
     End With
 
-    ' 4. YANGI JADVAL CHIZISH
+    ' 4. YANGI JADVAL
     Set shp = targetSlide.Shapes.AddTable(8, 2, 30, 70, 450, 350)
     Set targetTable = shp.Table
     
@@ -97,36 +95,55 @@ Sub JadvalniKochirish_Final()
         .ApplyStyle "{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}"
     End With
     
-    MsgBox "Tayyor! Yangi slayd yaratildi.", vbInformation
+    MsgBox "Tayyor! Agar ba'zi kataklar bo'sh bo'lsa, demak eski jadvalda ular birlashgan (merged) bo'lgan.", vbInformation
 End Sub
 
-' --- YORDAMCHI FUNKSIYALAR ---
+' --- XATOLIKDAN HIMOYALOVCHI FUNKSIYALAR ---
 
-Function GetCellText(tbl As Table, r As Integer, c As Integer) As String
-    On Error Resume Next
+Function GetSafeText(tbl As Table, r As Integer, c As Integer) As String
+    On Error Resume Next ' Xato bo'lsa indama
     Dim txt As String
-    txt = tbl.Cell(r, c).Shape.TextFrame.TextRange.Text
-    txt = Replace(txt, Chr(13), vbCr)
-    txt = Replace(txt, Chr(7), "")
-    GetCellText = Trim(txt)
-End Function
-
-Function SplitLine(txt As String, index As Integer) As String
-    Dim arr() As String
-    If InStr(txt, vbCr) > 0 Then
-        arr = Split(txt, vbCr)
-    Else
-        arr = Split(txt, " ")
+    txt = ""
+    
+    ' Agar qator yoki ustun yo'q bo'lsa, kod sinmasin
+    If r > tbl.Rows.Count Or c > tbl.Columns.Count Then
+        GetSafeText = ""
+        Exit Function
     End If
     
-    If UBound(arr) >= index Then
-        SplitLine = arr(index)
+    txt = tbl.Cell(r, c).Shape.TextFrame.TextRange.Text
+    
+    ' Tozalash
+    txt = Replace(txt, Chr(13), vbCr)
+    txt = Replace(txt, Chr(7), "")
+    txt = Replace(txt, vbCr, " ") ' Enterlarni probelga aylantiramiz
+    GetSafeText = Trim(txt)
+    On Error GoTo 0
+End Function
+
+Function SafeSplit(txt As String) As String
+    On Error Resume Next
+    If txt = "" Then
+        SafeSplit = ""
+        Exit Function
+    End If
+    
+    Dim arr() As String
+    ' Chevrolet Cobalt so'zi odatda probel bilan ajralgan
+    ' Lekin matn uzun bo'lsa, birinchi 2-3 ta so'zni olamiz
+    arr = Split(txt, " ")
+    
+    If UBound(arr) >= 1 Then
+        SafeSplit = arr(0) & " " & arr(1)
+    ElseIf UBound(arr) = 0 Then
+        SafeSplit = arr(0)
     Else
-        SplitLine = txt
+        SafeSplit = txt
     End If
 End Function
 
 Sub FillRow(tbl As Table, r As Integer, header As String, val As String, Optional isBold As Boolean = False)
+    On Error Resume Next
     tbl.Cell(r, 1).Shape.TextFrame.TextRange.Text = header
     tbl.Cell(r, 2).Shape.TextFrame.TextRange.Text = val
     If isBold Then tbl.Cell(r, 2).Shape.TextFrame.TextRange.Font.Bold = msoTrue
