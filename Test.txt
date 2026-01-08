@@ -1,12 +1,4 @@
-' --- ENG TEPAGA ---
-#If VBA7 Then
-    Private Declare PtrSafe Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
-#Else
-    Private Declare Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
-#End If
-' ------------------
-
-Sub PasportTezkor()
+Sub PasportMaksimalTezlik()
     Dim pptApp As Object
     Dim targetPres As Object, sourcePres As Object
     Dim pptSlide As Object
@@ -38,7 +30,9 @@ Sub PasportTezkor()
     lastRow = excelSheet.Cells(excelSheet.Rows.Count, 1).End(xlUp).Row
 
     For i = 2 To lastRow
-        DoEvents ' Tizim qotib qolmasligi uchun minimal imkoniyat
+        ' DoEvents bu yerda qoldirildi, lekin u vaqt olmaydi, 
+        ' shunchaki Excel qotib qolmasligini ta'minlaydi.
+        DoEvents 
         
         ' 1. Slayd yaratish
         targetPres.Slides(1).Duplicate
@@ -48,7 +42,6 @@ Sub PasportTezkor()
         For Each shp In pptSlide.Shapes
             If shp.HasTable Then
                 Set tbl = shp.Table
-                ' Ma'lumotlarni tez yozish
                 tbl.Cell(1, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 1).Value
                 tbl.Cell(2, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 2).Value
                 tbl.Cell(3, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 3).Value
@@ -59,7 +52,7 @@ Sub PasportTezkor()
                 tbl.Cell(8, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 8).Value
                 tbl.Cell(9, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 9).Value
                 tbl.Cell(10, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 10).Value
-                Exit For ' Jadval topildimi? Bo'ldi, chiqib ketamiz (Vaqtni tejash)
+                Exit For ' Topdimi? Bo'ldi, chiqib ketamiz
             End If
         Next shp
         
@@ -72,7 +65,6 @@ Sub PasportTezkor()
             isFound = RasmlarniTopVaJoyla(sourcePres, pptSlide, vinCode)
         End If
         
-        ' Status yozish
         If isFound Then
             excelSheet.Cells(i, 12).Value = "OK"
         Else
@@ -83,10 +75,10 @@ Sub PasportTezkor()
     Next i
 
     Application.ScreenUpdating = True
-    MsgBox "Tayyor! Tezlatilgan rejimda tugadi.", vbInformation
+    MsgBox "Tayyor! Sleepsiz rejimda tugadi.", vbInformation
 End Sub
 
-' --- TEZKOR QIDIRUV FUNKSIYASI ---
+' --- ENG TEZKOR QIDIRUV FUNKSIYASI ---
 Function RasmlarniTopVaJoyla(sourcePres As Object, targetSlide As Object, cleanVin As String) As Boolean
     Dim sld As Object
     Dim shp As Object
@@ -95,6 +87,7 @@ Function RasmlarniTopVaJoyla(sourcePres As Object, targetSlide As Object, cleanV
     Dim newPic As Object
     Dim slideText As String
     Dim r As Long, c As Long
+    Dim retryCount As Integer
     
     ' O'lchamlar
     Dim imgWidth As Double: imgWidth = 255
@@ -105,30 +98,29 @@ Function RasmlarniTopVaJoyla(sourcePres As Object, targetSlide As Object, cleanV
     Set foundSlide = Nothing
     RasmlarniTopVaJoyla = False
     
-    ' 1. SLAYDNI QIDIRISH
+    ' 1. QIDIRUV (OPTIMAL)
     For Each sld In sourcePres.Slides
         For Each shp In sld.Shapes
-            
             ' A) Oddiy matn
             If shp.HasTextFrame Then
                 If shp.TextFrame.HasText Then
-                    ' Replace funksiyasi ozgina vaqt oladi, shuning uchun avval InStr bilan tekshiramiz
-                    If InStr(1, shp.TextFrame.TextRange.Text, cleanVin, vbTextCompare) > 0 Then ' Probeli bilan bo'lsa ham topsin
+                    If InStr(1, shp.TextFrame.TextRange.Text, cleanVin, vbTextCompare) > 0 Then
                          Set foundSlide = sld
                          Exit For
-                    Else ' Agar topilmasa, probelsiz variantni tekshiramiz
-                        slideText = Replace(shp.TextFrame.TextRange.Text, " ", "")
-                        If InStr(1, slideText, cleanVin, vbTextCompare) > 0 Then
-                            Set foundSlide = sld
-                            Exit For
-                        End If
+                    End If
+                    ' Agar topilmasa, replace qilib ko'ramiz
+                    slideText = Replace(shp.TextFrame.TextRange.Text, " ", "")
+                    If InStr(1, slideText, cleanVin, vbTextCompare) > 0 Then
+                        Set foundSlide = sld
+                        Exit For
                     End If
                 End If
             End If
             
-            ' B) Jadval ichi
+            ' B) Jadval (Agar kerak bo'lsa)
             If shp.HasTable Then
-                ' Jadval ichini tekshirish sekin ishlashi mumkin, shuning uchun faqat kerak bo'lsa
+                 ' Jadval ichini tekshirish sekin bo'lsa, buni o'chirib qo'yish mumkin
+                 ' Lekin aniqlik uchun qoldirdim
                 For r = 1 To shp.Table.Rows.Count
                     For c = 1 To shp.Table.Columns.Count
                          If shp.Table.Cell(r, c).Shape.TextFrame.HasText Then
@@ -145,17 +137,17 @@ Function RasmlarniTopVaJoyla(sourcePres As Object, targetSlide As Object, cleanV
         If Not foundSlide Is Nothing Then Exit For
     Next sld
     
-    ' 2. RASMLARNI KO'CHIRISH (TEZKOR)
+    ' 2. KO'CHIRISH (SLEEPSIZ, LEKIN "RETRY" BILAN)
     If Not foundSlide Is Nothing Then
         RasmlarniTopVaJoyla = True
         picCount = 0
         
         For Each shp In foundSlide.Shapes
-            ' JADVALNI ANIQLASH VA O'TKAZIB YUBORISH
+            ' Filtrlash: Jadval va Matnlarni olmaymiz
             If shp.HasTable Then GoTo Keyingi
             If shp.HasTextFrame Then GoTo Keyingi
             
-            ' Faqat Rasm turlarini ajratish
+            ' Rasm yoki Konteyner ekanligini tekshirish
             Dim isPic As Boolean: isPic = False
             If shp.Type = 13 Then isPic = True
             If shp.Type = 14 Then
@@ -163,16 +155,30 @@ Function RasmlarniTopVaJoyla(sourcePres As Object, targetSlide As Object, cleanV
             End If
 
             If isPic Then
+                ' --- COPY ---
                 shp.Copy
-                ' Sleep vaqtini minimal qildim (faqat buferga tushish uchun yetarli)
-                Sleep 50 
+                DoEvents ' Operatsion tizimga buferni qabul qilishga ruxsat beramiz
                 
+                ' --- PASTE (Qayta urinish bilan) ---
                 On Error Resume Next
                 targetSlide.Shapes.Paste
                 
+                ' Agar Paste o'xshamasa (chunki Sleep yo'q), 
+                ' yana 3 marta urinib ko'ramiz (bu 500ms kutishdan tezroq)
+                If Err.Number <> 0 Then
+                    Err.Clear
+                    DoEvents
+                    targetSlide.Shapes.Paste ' 2-urinish
+                    If Err.Number <> 0 Then
+                         Err.Clear
+                         DoEvents
+                         targetSlide.Shapes.Paste ' 3-urinish
+                    End If
+                End If
+                
+                ' Agar baribir xato bo'lsa, tashlab ketamiz
                 If Err.Number = 0 Then
                     Set newPic = targetSlide.Shapes(targetSlide.Shapes.Count)
-                    
                     With newPic
                         .LockAspectRatio = msoFalse
                         .Width = imgWidth
