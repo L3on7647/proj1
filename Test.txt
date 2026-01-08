@@ -1,16 +1,12 @@
-Sub PasportTurboRejim()
+Sub PasportUniversal()
     Dim pptApp As Object
     Dim targetPres As Object, sourcePres As Object
     Dim pptSlide As Object
     Dim excelSheet As Worksheet
     Dim lastRow As Long, i As Long
     Dim targetPath As String, sourcePath As String
-    Dim shp As Object, tbl As Object
     Dim vinCode As String
-    Dim slideMap As Object ' Xotira uchun lug'at
-    Dim vinKey As String, cleanText As String
-    Dim sld As Object
-    Dim r As Long, c As Long
+    Dim isFound As String
     
     ' ================= SOZLAMALAR =================
     targetPath = "C:\Users\User\Desktop\Паспорт шаблон (002) (002).pptx"
@@ -18,74 +14,28 @@ Sub PasportTurboRejim()
     Set excelSheet = ThisWorkbook.Sheets("TABLE")
     ' ==============================================
 
-    ' 1. TEZLIKNI OSHIRISH UCHUN EKRANNI O'CHIRISH
     Application.ScreenUpdating = False
-    Application.Calculation = xlCalculationManual ' Excel hisob-kitobini to'xtatish
-
+    
     On Error Resume Next
     Set pptApp = GetObject(, "PowerPoint.Application")
     If Err.Number <> 0 Then Set pptApp = CreateObject("PowerPoint.Application")
     On Error GoTo 0
     pptApp.Visible = True
-    ' PowerPoint oynasini kichraytirib qo'yamiz (Grafika chizishga vaqt ketmasin)
-    pptApp.WindowState = 2 ' ppWindowMinimized
     
     Set targetPres = pptApp.Presentations.Open(targetPath)
     Set sourcePres = pptApp.Presentations.Open(sourcePath)
     
     lastRow = excelSheet.Cells(excelSheet.Rows.Count, 1).End(xlUp).Row
 
-    ' ---------------------------------------------------------
-    ' 2. BAZANI INDEKSLASH (Eng muhim qism - Xotiraga olish)
-    ' ---------------------------------------------------------
-    Set slideMap = CreateObject("Scripting.Dictionary")
-    
-    ' Donor fayldagi har bir slaydni bir marta o'qib chiqamiz
-    For Each sld In sourcePres.Slides
-        For Each shp In sld.Shapes
-            cleanText = ""
-            
-            ' Matnni o'qish
-            If shp.HasTextFrame Then
-                If shp.TextFrame.HasText Then
-                    cleanText = Replace(Trim(shp.TextFrame.TextRange.Text), " ", "")
-                End If
-            End If
-            
-            ' Jadvalni o'qish
-            If shp.HasTable Then
-                 ' Jadvalning faqat birinchi katagida VIN bo'lsa, tezroq bo'ladi
-                 ' Agar hammasini tekshirish shart bo'lsa, for loop qoladi
-                 For r = 1 To shp.Table.Rows.Count
-                    For c = 1 To shp.Table.Columns.Count
-                        If shp.Table.Cell(r, c).Shape.TextFrame.HasText Then
-                            cleanText = Replace(Trim(shp.Table.Cell(r, c).Shape.TextFrame.TextRange.Text), " ", "")
-                            If Len(cleanText) > 5 Then Exit For ' Topilsa chiqamiz
-                        End If
-                    Next c
-                    If Len(cleanText) > 5 Then Exit For
-                 Next r
-            End If
-            
-            ' Agar matn VIN kodga o'xshasa (uzunligi 5 dan katta), lug'atga yozamiz
-            If Len(cleanText) > 5 Then
-                If Not slideMap.Exists(cleanText) Then
-                    slideMap.Add cleanText, sld.SlideIndex
-                End If
-            End If
-        Next shp
-    Next sld
-
-    ' ---------------------------------------------------------
-    ' 3. ASOSIY SIKL (Endi qidirmaydi, to'g'ri ko'chiradi)
-    ' ---------------------------------------------------------
     For i = 2 To lastRow
+        DoEvents
         
         ' 1. Slayd yaratish
         targetPres.Slides(1).Duplicate
         Set pptSlide = targetPres.Slides(2)
         
         ' 2. Jadvalni to'ldirish
+        Dim shp As Object, tbl As Object
         For Each shp In pptSlide.Shapes
             If shp.HasTable Then
                 Set tbl = shp.Table
@@ -103,99 +53,180 @@ Sub PasportTurboRejim()
             End If
         Next shp
         
-        ' 3. VIN orqali rasmni "shartta" topish
+        ' 3. VIN kodni olish
         vinCode = Replace(Trim(excelSheet.Cells(i, 11).Value), " ", "")
         
+        ' 4. Rasmlarni qidirish
+        isFound = "VIN Topilmadi" ' Default holat
         If Len(vinCode) > 3 Then
-            ' Lug'atdan qaraymiz: Bu VIN bormi?
-            If slideMap.Exists(vinCode) Then
-                ' Bor bo'lsa, o'sha slayd raqamini olamiz
-                Dim sourceIndex As Integer
-                sourceIndex = slideMap(vinCode)
-                
-                ' O'sha slaydga murojaat qilamiz
-                Call RasmlarniKo'chir(sourcePres.Slides(sourceIndex), pptSlide)
-                excelSheet.Cells(i, 12).Value = "OK"
-            Else
-                excelSheet.Cells(i, 12).Value = "Yo'q"
-            End If
+            isFound = RasmlarniTop(sourcePres, pptSlide, vinCode)
         End If
+        
+        ' Natijani Excelga yozish
+        excelSheet.Cells(i, 12).Value = isFound
         
         pptSlide.MoveTo toPos:=targetPres.Slides.Count
     Next i
 
-    ' Sozlamalarni joyiga qaytarish
-    pptApp.WindowState = 1 ' ppWindowNormal
     Application.ScreenUpdating = True
-    Application.Calculation = xlCalculationAutomatic
-    
-    MsgBox "Tayyor! Turbo rejim tugadi.", vbInformation
+    MsgBox "Tayyor! L ustuniga qarang: Nima uchun rasm o'tmaganini yozib qo'ydim.", vbInformation
 End Sub
 
-' --- KO'CHIRISH FUNKSIYASI (Sleepsiz va Xavfsiz) ---
-Sub RasmlarniKo'chir(sourceSld As Object, targetSld As Object)
-    Dim shp As Object, newPic As Object
+' --- KUCHAYTIRILGAN QIDIRUV VA NUSXA OLISH ---
+Function RasmlarniTop(sourcePres As Object, targetSlide As Object, cleanVin As String) As String
+    Dim sld As Object
+    Dim shp As Object
+    Dim foundSlide As Object
     Dim picCount As Integer
+    Dim newPic As Object
+    Dim slideText As String
+    Dim r As Long, c As Long
+    
+    ' O'lchamlar
     Dim imgWidth As Double: imgWidth = 255
     Dim imgHeight As Double: imgHeight = 194.5
     Dim startLeft As Double: startLeft = 360
     Dim startTop As Double: startTop = 80
-    Dim retry As Long
     
+    Set foundSlide = Nothing
+    
+    ' 1. VIN KOD BO'YICHA SLAYDNI TOPISH
+    For Each sld In sourcePres.Slides
+        For Each shp In sld.Shapes
+            ' Matn ichidan qidirish
+            If shp.HasTextFrame Then
+                If shp.TextFrame.HasText Then
+                    slideText = Replace(shp.TextFrame.TextRange.Text, " ", "")
+                    If InStr(1, slideText, cleanVin, vbTextCompare) > 0 Then
+                        Set foundSlide = sld
+                        Exit For
+                    End If
+                End If
+            End If
+            ' Jadval ichidan qidirish
+            If shp.HasTable Then
+                For r = 1 To shp.Table.Rows.Count
+                    For c = 1 To shp.Table.Columns.Count
+                         If shp.Table.Cell(r, c).Shape.TextFrame.HasText Then
+                            slideText = Replace(shp.Table.Cell(r, c).Shape.TextFrame.TextRange.Text, " ", "")
+                            If InStr(1, slideText, cleanVin, vbTextCompare) > 0 Then
+                                Set foundSlide = sld
+                                Exit For
+                            End If
+                         End If
+                    Next c
+                Next r
+            End If
+        Next shp
+        If Not foundSlide Is Nothing Then Exit For
+    Next sld
+    
+    ' Agar slayd topilmasa
+    If foundSlide Is Nothing Then
+        RasmlarniTop = "VIN Topilmadi"
+        Exit Function
+    End If
+    
+    ' 2. SLAYD TOPILDI -> ENDI RASMLARNI KO'CHIRAMIZ
     picCount = 0
+    RasmlarniTop = "Rasm Yo'q" ' Slayd bor, lekin rasm yo'q bo'lishi mumkin
     
-    For Each shp In sourceSld.Shapes
-        ' JADVAL VA MATNNI BLOKLASH
-        If shp.HasTable Then GoTo SkipShape
-        If shp.HasTextFrame Then GoTo SkipShape
+    For Each shp In foundSlide.Shapes
+        ' Jadvallarni o'tkazib yuboramiz
+        If shp.HasTable Then GoTo KeyingiShakl
         
-        ' Faqat Rasm (13) yoki Rasm Konteyneri (14->18)
+        ' Yozuvlarni o'tkazib yuboramiz (faqat rasm kerak)
+        If shp.HasTextFrame Then
+            If shp.TextFrame.HasText Then GoTo KeyingiShakl
+        End If
+        
+        ' --- GURUHLAR (GROUP) BILAN ISHLASH ---
+        If shp.Type = 6 Then ' msoGroup (Guruhlangan obyekt)
+            Dim subShp As Object
+            For Each subShp In shp.GroupItems
+                ' Guruh ichidagi rasmni tekshiramiz
+                If subShp.Type = 13 Or subShp.Type = 7 Then ' Picture or Embedded
+                    Call CopyPasteImage(subShp, targetSlide, picCount, startLeft, startTop, imgWidth, imgHeight)
+                    RasmlarniTop = "OK (Guruhdan)"
+                    If picCount >= 4 Then Exit Function
+                End If
+            Next subShp
+            GoTo KeyingiShakl
+        End If
+
+        ' --- ODDIY RASMLAR ---
+        ' Type 13 = Picture, Type 7 = Embedded, Type 1 = AutoShape (bazan rasm bo'ladi)
+        ' Type 14 = Placeholder (Picture Placeholder)
         Dim isPic As Boolean: isPic = False
-        If shp.Type = 13 Then isPic = True
+        
+        If shp.Type = 13 Or shp.Type = 7 Then isPic = True
         If shp.Type = 14 Then
-            If shp.PlaceholderFormat.ContainedType = 18 Then isPic = True
+            If shp.PlaceholderFormat.ContainedType = 18 Then isPic = True ' Picture Placeholder
+        End If
+        
+        ' Agar shakl (Rectangle) bo'lsa-yu, ichida rasm bo'lsa (UserPicture)
+        If shp.Type = 1 Then 
+             ' Buni aniqlash qiyin, shuning uchun shunchaki copy qilib ko'ramiz
+             ' lekin matni yo'qligiga ishonch hosil qilish kerak (tepada tekshirdik)
+             isPic = True
         End If
 
         If isPic Then
-            shp.Copy
-            ' Sleep yo'q, lekin Paste xato bersa qayta urinamiz
-            
-            On Error Resume Next
-            targetSld.Shapes.Paste
-            
-            ' Agar xato bersa (Copy ulgurmasa), sikl bilan kutamiz (bu Sleepdan tezroq)
-            If Err.Number <> 0 Then
-                Err.Clear
-                For retry = 1 To 1000 ' Mikrosekundlik kutish
-                    DoEvents
-                    targetSld.Shapes.Paste
-                    If Err.Number = 0 Then Exit For
-                Next retry
-            End If
-            
-            If Err.Number = 0 Then
-                Set newPic = targetSld.Shapes(targetSld.Shapes.Count)
-                With newPic
-                    .LockAspectRatio = msoFalse
-                    .Width = imgWidth
-                    .Height = imgHeight
-                    If (picCount Mod 2) = 0 Then
-                        .Left = startLeft
-                    Else
-                        .Left = startLeft + imgWidth + 5
-                    End If
-                    If picCount < 2 Then
-                        .Top = startTop
-                    Else
-                        .Top = startTop + imgHeight + 5
-                    End If
-                End With
-                picCount = picCount + 1
-            End If
-            On Error GoTo 0
-            
-            If picCount >= 4 Then Exit Sub
+            Call CopyPasteImage(shp, targetSlide, picCount, startLeft, startTop, imgWidth, imgHeight)
+            RasmlarniTop = "OK"
+            If picCount >= 4 Then Exit Function
         End If
-SkipShape:
+        
+KeyingiShakl:
     Next shp
+End Function
+
+' --- KO'CHIRISH VA JOYLASH UCHUN ALOHIDA SUB ---
+Sub CopyPasteImage(shp As Object, targetSlide As Object, ByRef picCount As Integer, startLeft As Double, startTop As Double, w As Double, h As Double)
+    Dim newPic As Object
+    Dim retry As Integer
+    
+    shp.Copy
+    DoEvents
+    
+    On Error Resume Next
+    targetSlide.Shapes.Paste
+    
+    ' Agar xato bersa qayta urinish
+    If Err.Number <> 0 Then
+        Err.Clear
+        For retry = 1 To 500
+            DoEvents
+            targetSlide.Shapes.Paste
+            If Err.Number = 0 Then Exit For
+        Next retry
+    End If
+    
+    If Err.Number = 0 Then
+        Set newPic = targetSlide.Shapes(targetSlide.Shapes.Count)
+        With newPic
+            .LockAspectRatio = msoFalse
+            .Width = w
+            .Height = h
+            
+            If (picCount Mod 2) = 0 Then
+                .Left = startLeft
+            Else
+                .Left = startLeft + w + 5
+            End If
+            
+            If picCount < 2 Then
+                .Top = startTop
+            Else
+                .Top = startTop + h + 5
+            End If
+            
+            ' Chiroyli ramka
+            .Line.Visible = msoTrue
+            .Line.Weight = 0.5
+            .Line.ForeColor.RGB = RGB(0, 0, 0)
+        End With
+        picCount = picCount + 1
+    End If
+    On Error GoTo 0
 End Sub
