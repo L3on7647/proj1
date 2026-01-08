@@ -1,14 +1,56 @@
-Sub DamasKirillcha()
+Sub DamasKirillcha_Unicode()
     Dim srcSlide As Slide
     Dim newSlide As Slide
     Dim shp As Shape
     Dim picColl As New Collection
     Dim i As Integer
     
-    ' 1. Hozirgi slaydni aniqlash
+    ' O'zbek harflari uchun maxsus o'zgaruvchilar
+    Dim tHeader As String
+    Dim tKeeper As String, tPropName As String, tAddress As String
+    Dim tArea As String, tDesc As String, tComm As String
+    Dim tState As String, tDate As String, tValue As String
+    Dim tGood As String
+    
+    ' --- SO'ZLARNI KOD ORQALI YASASH (Soroqcha bo'lmasligi uchun) ---
+    ' ОБЪЕКТ ПАСПОРТИ
+    tHeader = ChrW(1054) & ChrW(1041) & ChrW(1066) & ChrW(1045) & ChrW(1050) & ChrW(1058) & " " & ChrW(1055) & ChrW(1040) & ChrW(1057) & ChrW(1055) & ChrW(1054) & ChrW(1056) & ChrW(1058) & ChrW(1048)
+    
+    ' Балансда сақловчи ("қ" - 1179)
+    tKeeper = ChrW(1041) & ChrW(1072) & ChrW(1083) & ChrW(1072) & ChrW(1085) & ChrW(1089) & ChrW(1076) & ChrW(1072) & " " & ChrW(1089) & ChrW(1072) & ChrW(1179) & ChrW(1083) & ChrW(1086) & ChrW(1074) & ChrW(1095) & ChrW(1080)
+    
+    ' Мулк номи
+    tPropName = ChrW(1052) & ChrW(1091) & ChrW(1083) & ChrW(1082) & " " & ChrW(1085) & ChrW(1086) & ChrW(1084) & ChrW(1080)
+    
+    ' Манзили
+    tAddress = ChrW(1052) & ChrW(1072) & ChrW(1085) & ChrW(1079) & ChrW(1080) & ChrW(1083) & ChrW(1080)
+    
+    ' Майдони
+    tArea = ChrW(1052) & ChrW(1072) & ChrW(1081) & ChrW(1076) & ChrW(1086) & ChrW(1085) & ChrW(1080)
+    
+    ' Тавсифи
+    tDesc = ChrW(1058) & ChrW(1072) & ChrW(1074) & ChrW(1089) & ChrW(1080) & ChrW(1092) & ChrW(1080)
+    
+    ' Коммуникация
+    tComm = ChrW(1050) & ChrW(1086) & ChrW(1084) & ChrW(1084) & ChrW(1091) & ChrW(1085) & ChrW(1080) & ChrW(1082) & ChrW(1072) & ChrW(1094) & ChrW(1080) & ChrW(1103)
+    
+    ' Ҳолати ("Ҳ" - 1206)
+    tState = ChrW(1206) & ChrW(1086) & ChrW(1083) & ChrW(1072) & ChrW(1090) & ChrW(1080)
+    
+    ' Балансга олинган сана
+    tDate = ChrW(1041) & ChrW(1072) & ChrW(1083) & ChrW(1072) & ChrW(1085) & ChrW(1089) & ChrW(1075) & ChrW(1072) & " " & ChrW(1086) & ChrW(1083) & ChrW(1080) & ChrW(1085) & ChrW(1075) & ChrW(1072) & ChrW(1085) & " " & ChrW(1089) & ChrW(1072) & ChrW(1085) & ChrW(1072)
+    
+    ' Баланс қиймати ("қ" - 1179)
+    tValue = ChrW(1041) & ChrW(1072) & ChrW(1083) & ChrW(1072) & ChrW(1085) & ChrW(1089) & " " & ChrW(1179) & ChrW(1080) & ChrW(1081) & ChrW(1084) & ChrW(1072) & ChrW(1090) & ChrW(1080)
+    
+    ' Қониқарли ("Қ" - 1178, "қ" - 1179)
+    tGood = ChrW(1178) & ChrW(1086) & ChrW(1085) & ChrW(1080) & ChrW(1179) & ChrW(1072) & ChrW(1088) & ChrW(1083) & ChrW(1080)
+
+
+    ' 1. Slaydni aniqlash
     Set srcSlide = ActiveWindow.View.Slide
     
-    ' 2. Rasmlarni yig'ish (Guruhlangan yoki Placeholder ichida bo'lsa ham topadi)
+    ' 2. Rasmlarni yig'ish
     For Each shp In srcSlide.Shapes
         If shp.Type = msoPicture Or shp.Type = msoLinkedPicture Then
             picColl.Add shp
@@ -27,61 +69,57 @@ Sub DamasKirillcha()
         Exit Sub
     End If
 
-    ' 3. YANGI SLAYD OCHISH
+    ' 3. YANGI SLAYD
     Set newSlide = ActivePresentation.Slides.Add(srcSlide.SlideIndex + 1, ppLayoutBlank)
     
-    ' --- SARLAVHA (Kirillcha) ---
+    ' --- SARLAVHA ---
     Dim titleBox As Shape
     Set titleBox = newSlide.Shapes.AddTextbox(msoTextOrientationHorizontal, 0, 20, 960, 50)
     With titleBox
-        .Fill.ForeColor.RGB = RGB(141, 180, 226) ' Damas foniga o'xshash ko'k
-        .TextFrame.TextRange.Text = "ОБЪЕКТ ПАСПОРТИ"
+        .Fill.ForeColor.RGB = RGB(141, 180, 226)
+        .TextFrame.TextRange.Text = tHeader ' ОБЪЕКТ ПАСПОРТИ
         .TextFrame.TextRange.Font.Name = "Calibri"
         .TextFrame.TextRange.Font.Bold = msoTrue
         .TextFrame.TextRange.Font.Size = 28
-        .TextFrame.TextRange.Font.Color.RGB = RGB(255, 255, 255) ' Oq yozuv
+        .TextFrame.TextRange.Font.Color.RGB = RGB(255, 255, 255)
         .TextFrame.TextRange.ParagraphFormat.Alignment = ppAlignCenter
         .TextFrame.VerticalAnchor = msoAnchorMiddle
     End With
     
-    ' --- JADVAL (Chap tomon - Kirillcha) ---
+    ' --- JADVAL ---
     Dim tbl As Shape
     Set tbl = newSlide.Shapes.AddTable(9, 2, 30, 90, 420, 400)
     With tbl.Table
-        .Columns(1).Width = 140
-        .Columns(2).Width = 280
+        .Columns(1).Width = 160 ' Ustunni sal kengaytirdim so'zlar sig'ishi uchun
+        .Columns(2).Width = 260
         
-        ' Yozuvlarni Kirillchaga o'zgartirdim
-        SetCellText tbl.Table, 1, 1, "Балансда сақловчи"
-        SetCellText tbl.Table, 2, 1, "Мулк номи"
-        SetCellText tbl.Table, 3, 1, "Манзили"
-        SetCellText tbl.Table, 4, 1, "Майдони"
-        SetCellText tbl.Table, 5, 1, "Тавсифи"
-        SetCellText tbl.Table, 6, 1, "Коммуникация"
-        SetCellText tbl.Table, 7, 1, "Ҳолати"
-        SetCellText tbl.Table, 8, 1, "Балансга олинган сана"
-        SetCellText tbl.Table, 9, 1, "Баланс қиймати"
+        SetCellText tbl.Table, 1, 1, tKeeper   ' Балансда сақловчи
+        SetCellText tbl.Table, 2, 1, tPropName ' Мулк номи
+        SetCellText tbl.Table, 3, 1, tAddress  ' Манзили
+        SetCellText tbl.Table, 4, 1, tArea     ' Майдони
+        SetCellText tbl.Table, 5, 1, tDesc     ' Тавсифи
+        SetCellText tbl.Table, 6, 1, tComm     ' Коммуникация
+        SetCellText tbl.Table, 7, 1, tState    ' Ҳолати
+        SetCellText tbl.Table, 8, 1, tDate     ' Балансга олинган сана
+        SetCellText tbl.Table, 9, 1, tValue    ' Баланс қиймати
         
-        ' 7-qator (Holati) ga standart "Қониқарли" deb yozib qo'yamiz (Damasdagidek)
-        SetCellText tbl.Table, 7, 2, "Қониқарли"
+        SetCellText tbl.Table, 7, 2, tGood     ' Қониқарли
         
-        ' Jadval stili
         .ApplyStyle "{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}"
     End With
 
-    ' --- RASMLARNI JOYLASH (O'ng tomon - Zich 2x2) ---
+    ' --- RASMLAR (Damas Stilida) ---
     Dim imgW As Single, imgH As Single
     Dim startX As Single, startY As Single
     Dim gap As Single
     Dim r As Integer, c As Integer
     Dim newPic As ShapeRange
     
-    ' Parametrlarni "Damas" rasmidagidek to'g'irlaymiz
-    startX = 470   ' Jadvalga yaqinroq
-    startY = 90    ' Jadval bilan bir chiziqda
-    imgW = 230     ' Rasm kattaroq
-    imgH = 160     ' Balandligi
-    gap = 5        ' Orasi juda yaqin (zich) bo'lishi kerak
+    startX = 470
+    startY = 90
+    imgW = 230
+    imgH = 160
+    gap = 5
     
     For i = 1 To picColl.Count
         If i > 4 Then Exit For
@@ -95,32 +133,25 @@ Sub DamasKirillcha()
         With newPic
             .LockAspectRatio = msoTrue
             .Width = imgW
-            
-            ' Ekranga sig'may qolmasligi va bir xil turishi uchun "Crop" qilamiz
             If .Height > imgH Then
                 .PictureFormat.CropBottom = .Height - imgH
-            ElseIf .Height < imgH Then
-                ' Agar rasm kichkina bo'lsa, o'rtada tursin (muammo bo'lmasligi uchun)
             End If
             
             .Left = startX + (c * (imgW + gap))
             .Top = startY + (r * (imgH + gap))
             
-            ' Oq ramka (Damas stilida rasmlar ajralib turishi uchun)
             .Line.Visible = msoTrue
             .Line.ForeColor.RGB = RGB(255, 255, 255)
             .Line.Weight = 3
         End With
     Next i
     
-    MsgBox "Tayyor! Kirillcha variant yaratildi.", vbInformation
+    MsgBox "Tayyor!", vbInformation
 End Sub
 
-' Yozuv yozishni osonlashtiruvchi yordamchi kod
 Sub SetCellText(t As Table, r As Integer, c As Integer, txt As String)
     t.Cell(r, c).Shape.TextFrame.TextRange.Text = txt
     t.Cell(r, c).Shape.TextFrame.TextRange.Font.Name = "Calibri"
     t.Cell(r, c).Shape.TextFrame.TextRange.Font.Size = 11
-    ' Chap ustunni qalin (Bold) qilamiz
     If c = 1 Then t.Cell(r, c).Shape.TextFrame.TextRange.Font.Bold = msoTrue
 End Sub
