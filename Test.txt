@@ -1,10 +1,10 @@
-' --- BU QISM ENG TEPADA TURISHI SHART ---
+' --- BU QISMNI HECH NARSA O'ZGARTIRMASDAN KO'CHIRING ---
 #If VBA7 Then
-    Public Declare PtrSafe Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
+    Private Declare PtrSafe Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
 #Else
-    Public Declare Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
+    Private Declare Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
 #End If
-' ----------------------------------------
+' -------------------------------------------------------
 
 Sub PowerPointgaPasportFinal()
     Dim pptApp As Object
@@ -17,7 +17,10 @@ Sub PowerPointgaPasportFinal()
     Dim tbl As Object
     
     ' --- SOZLAMALAR ---
+    ' PowerPoint manzilingizni to'g'ri kiriting:
     pptPath = "C:\Users\User\Desktop\Паспорт шаблон (002) (002).pptx" 
+    
+    ' Excel varaq nomi:
     Set excelSheet = ThisWorkbook.Sheets("TABLE")
     ' ------------------
 
@@ -38,11 +41,11 @@ Sub PowerPointgaPasportFinal()
         ' 1. Slayddan nusxa olamiz
         pptPres.Slides(1).Duplicate
         
-        ' Xatolikni oldini olish uchun 0.5 soniya kutamiz (Majburiy)
+        ' Xatolikni oldini olish uchun biroz kutamiz
         DoEvents
         Sleep 500 
         
-        ' Yangi slayd har doim 2-raqamda paydo bo'ladi
+        ' Nusxa olingan slayd har doim 2-raqamda paydo bo'ladi
         Set pptSlide = pptPres.Slides(2)
         
         ' 2. Jadvalni topib to'ldiramiz
@@ -50,39 +53,36 @@ Sub PowerPointgaPasportFinal()
             If shp.HasTable Then
                 Set tbl = shp.Table
                 
-                ' --- QATORLAR (Endi 1-qatordan boshlaymiz) ---
+                ' --- QATORLAR (Jadvalingizning 1-qatoridan boshlab yozadi) ---
                 
-                ' Agar yana xatolik bersa, demak jadval strukturasi boshqacha. 
-                ' Hozircha siz aytgandek 1 pog'ona yuqoriga surdim.
-                
-                ' 1. Балансда сақловчи (1-qator)
+                ' 1. Балансда сақlovchi
                 tbl.Cell(1, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 1).Value
                 
-                ' 2. Мулк номи (2-qator)
+                ' 2. Мулк номи
                 tbl.Cell(2, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 2).Value
                 
-                ' 3. Манзили (3-qator)
+                ' 3. Манзили
                 tbl.Cell(3, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 3).Value
                 
-                ' 4. Майдони (4-qator)
+                ' 4. Майдони
                 tbl.Cell(4, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 4).Value
                 
-                ' 5. Тавсифи (5-qator)
+                ' 5. Тавсифи
                 tbl.Cell(5, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 5).Value
                 
-                ' 6. Коммуникация (6-qator)
+                ' 6. Коммуникация
                 tbl.Cell(6, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 6).Value
                 
-                ' 7. Ҳолати (7-qator)
+                ' 7. Ҳолати
                 tbl.Cell(7, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 7).Value
                 
-                ' 8. Сана (8-qator)
+                ' 8. Сана
                 tbl.Cell(8, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 8).Value
                 
-                ' 9. Қиймати (9-qator)
+                ' 9. Қиймати
                 tbl.Cell(9, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 9).Value
                 
-                ' 10. Шартлари (10-qator)
+                ' 10. Шартлари
                 tbl.Cell(10, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 10).Value
                 
             End If
@@ -91,11 +91,11 @@ Sub PowerPointgaPasportFinal()
         ' 3. Tayyor slaydni oxiriga tashlaymiz
         pptSlide.MoveTo toPos:=pptPres.Slides.Count
         
-        ' Yana ozgina kutamiz, keyingi aylanaga o'tishdan oldin
+        ' Keyingi qatorga o'tishdan oldin yana kutamiz
         DoEvents
         Sleep 200
         
     Next i
 
-    MsgBox "Tayyor! Xatoliksiz tugadi.", vbInformation
+    MsgBox "Tayyor! Barcha pasportlar yaratildi.", vbInformation
 End Sub
