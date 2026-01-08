@@ -1,86 +1,182 @@
-Sub RasmlarniFormatlash()
-    Dim currentSlide As Slide
+Sub FullPassportGenerator()
+    Dim srcSlide As Slide
     Dim newSlide As Slide
     Dim shp As Shape
+    Dim srcTable As Table
+    Dim trgTable As Table
+    
+    ' O'zgaruvchilar
+    Dim clientName As String
+    Dim carFullInfo As String
+    Dim carName As String
+    Dim balanceDate As String
+    Dim balanceValue As String
+    
     Dim picCollection As New Collection
     Dim i As Integer
-    Dim leftPos As Single, topPos As Single
-    Dim imgWidth As Single, imgHeight As Single
-    Dim col As Integer, row As Integer
+    Dim r As Integer
     
-    ' 1. Aktiv slaydni aniqlash
-    Set currentSlide = ActiveWindow.View.Slide
+    ' 1. HOZIRGI SLAYDNI O'QISH
+    Set srcSlide = ActiveWindow.View.Slide
     
-    ' 2. Slayddagi barcha rasmlarni yig'ib olish
-    For Each shp In currentSlide.Shapes
-        ' Agar shakl rasm bo'lsa yoki rasm ramkasi bo'lsa
-        If shp.Type = msoPicture Or shp.Type = msoLinkedPicture Then
-            picCollection.Add shp
+    ' Jadvalni qidirib topish
+    Dim tableFound As Boolean
+    tableFound = False
+    
+    For Each shp In srcSlide.Shapes
+        If shp.HasTable Then
+            Set srcTable = shp.Table
+            tableFound = True
+            Exit For
         End If
     Next shp
     
-    ' Agar rasm topilmasa
-    If picCollection.Count = 0 Then
-        MsgBox "Bu slaydda rasm topilmadi!", vbExclamation
+    If Not tableFound Then
+        MsgBox "Bu slaydda jadval topilmadi!", vbCritical
         Exit Sub
     End If
     
-    ' 3. Yangi slayd ochish
-    Set newSlide = ActivePresentation.Slides.Add(currentSlide.SlideIndex + 1, ppLayoutBlank)
+    ' 2. MATNLARNI ANIQ QATORLARDAN OLISH (SOURCE MAPPING)
+    ' 1-Rasmga asoslanib qatorlarni qattiq belgilaymiz:
     
-    ' 4. Rasmlarni joylash parametrlari (O'ng tomon uchun)
-    ' Bu yerda koordinatalarni o'zgartirishingiz mumkin
-    Dim startX As Single: startX = 400 ' Chapdan qancha masofa (Tabledan keyin)
-    Dim startY As Single: startY = 50  ' Tepadan masofa
-    Dim gap As Single: gap = 10        ' Rasmlar orasidagi masofa
+    ' Mijoz nomi (Headerdan yoki 1-qatordan)
+    On Error Resume Next
+    clientName = CleanText(srcTable.Cell(1, 2).Shape.TextFrame.TextRange.Text)
+    If Len(clientName) < 2 Then clientName = CleanText(srcTable.Cell(1, 1).Shape.TextFrame.TextRange.Text)
     
-    ' Har bir rasm uchun o'lcham (taxminan 2-rasmdagi o'lcham)
-    imgWidth = 220
-    imgHeight = 150
+    ' Row 6: Garov obyekti (Cobalt haqida to'liq info)
+    carFullInfo = CleanText(srcTable.Cell(6, 2).Shape.TextFrame.TextRange.Text)
     
-    ' 5. Har bir rasmni ko'chirib, joylashtirish
-    For i = 1 To picCollection.Count
-        ' Rasmni nusxalash
-        picCollection(i).Copy
-        
-        ' Yangi slaydga tashlash
-        Dim newPic As ShapeRange
-        Set newPic = newSlide.Shapes.Paste
-        
-        ' Joylashuvni hisoblash (2x2 matritsa)
-        ' i=1 -> Row 0, Col 0
-        ' i=2 -> Row 0, Col 1
-        ' i=3 -> Row 1, Col 0
-        ' i=4 -> Row 1, Col 1
-        
-        row = (i - 1) \ 2 ' Butun bo'lish (0 yoki 1)
-        col = (i - 1) Mod 2 ' Qoldiq (0 yoki 1)
-        
-        leftPos = startX + (col * (imgWidth + gap))
-        topPos = startY + (row * (imgHeight + gap))
-        
-        ' Rasmni joylash va o'lchamini to'g'irlash
-        With newPic
-            .LockAspectRatio = msoTrue ' Mashina shakli buzilmasligi uchun
-            .Width = imgWidth
-            ' Agar balandlik juda katta bo'lib ketsa, qirqamiz (Crop)
-            If .Height > imgHeight Then
-                .Height = imgHeight
-            End If
-            
-            .Left = leftPos
-            .Top = topPos
-            
-            ' Chiroyli ko'rinishi uchun ramka (ixtiyoriy)
-            .Line.Visible = msoTrue
-            .Line.ForeColor.RGB = RGB(200, 200, 200)
-            .Line.Weight = 1
-        End With
-        
-        ' Agar 4 tadan ko'p rasm bo'lsa, to'xtaymiz (dizayn buzilmasligi uchun)
-        If i >= 4 Then Exit For
-    Next i
+    ' Row 7: Balansga olish jarayoni (Sana shu yerda)
+    balanceDate = CleanText(srcTable.Cell(7, 2).Shape.TextFrame.TextRange.Text)
     
-    MsgBox "Rasmlar yangi slaydga o'tkazildi!", vbInformation
+    ' Row 8: Balans qiymati (Summa)
+    balanceValue = CleanText(srcTable.Cell(8, 2).Shape.TextFrame.TextRange.Text)
+    On Error GoTo 0
+    
+    ' Mulk nomini ajratib olish (Birinchi qatorni kesib olamiz)
+    If InStr(carFullInfo, vbCr) > 0 Then
+        carName = Split(carFullInfo, vbCr)(0)
+    Else
+        carName = Split(carFullInfo, " ")(0) & " " & Split(carFullInfo, " ")(1)
+    End If
 
+    ' 3. RASMLARNI YIG'ISH
+    For Each shp In srcSlide.Shapes
+        ' Rasm ekanligini tekshiramiz
+        If shp.Type = msoPicture Or shp.Type = msoLinkedPicture Then
+            picCollection.Add shp
+        End If
+        ' Ba'zan rasm Placeholder ichida bo'ladi
+        If shp.Type = msoPlaceholder Then
+            If shp.PlaceholderFormat.ContainedType = msoPicture Then
+                picCollection.Add shp
+            End If
+        End If
+    Next shp
+
+    ' 4. YANGI SLAYD YARATISH
+    Set newSlide = ActivePresentation.Slides.Add(srcSlide.SlideIndex + 1, ppLayoutBlank)
+    
+    ' --- A) SARLAVHA ---
+    Dim titleBox As Shape
+    Set titleBox = newSlide.Shapes.AddTextbox(msoTextOrientationHorizontal, 30, 20, 900, 40)
+    With titleBox
+        .Fill.ForeColor.RGB = RGB(141, 180, 226) ' Och ko'k
+        .Line.Visible = msoFalse
+        .TextFrame.TextRange.Text = "OBYEKT PASPORTI" & " - " & "MULK TO'LIQ NOMI"
+        .TextFrame.TextRange.Font.Bold = msoTrue
+        .TextFrame.TextRange.Font.Size = 18
+        .TextFrame.TextRange.Font.Color.RGB = RGB(0, 0, 0)
+        .TextFrame.TextRange.ParagraphFormat.Alignment = ppAlignCenter
+        .TextFrame.VerticalAnchor = msoAnchorMiddle
+    End With
+
+    ' --- B) YANGI JADVAL (CHAP TOMON) ---
+    Dim tblShape As Shape
+    Set tblShape = newSlide.Shapes.AddTable(8, 2, 30, 80, 450, 400)
+    Set trgTable = tblShape.Table
+    
+    With trgTable
+        .Columns(1).Width = 140
+        .Columns(2).Width = 310
+        
+        ' Qatorlarni to'ldiramiz
+        FillRow trgTable, 1, "Balansda saqlovchi", clientName, True
+        FillRow trgTable, 2, "Mulk nomi", carName
+        FillRow trgTable, 3, "Manzili", "" ' Bo'sh qoladi
+        FillRow trgTable, 4, "Maydoni", "" ' Bo'sh qoladi
+        FillRow trgTable, 5, "Tavsifi", carFullInfo
+        trgTable.Cell(5, 2).Shape.TextFrame.TextRange.Font.Size = 10 ' Shriftni kichraytiramiz
+        
+        FillRow trgTable, 6, "Holati", "Qoniqarli"
+        FillRow trgTable, 7, "Balansga olingan sana", balanceDate
+        FillRow trgTable, 8, "Balans qiymati", balanceValue
+        
+        ' Jadval dizayni
+        .ApplyStyle "{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}"
+    End With
+    
+    ' --- C) RASMLARNI JOYLASH (O'NG TOMON - 2x2 GRID) ---
+    Dim imgW As Single, imgH As Single
+    Dim startX As Single, startY As Single
+    Dim gap As Single
+    Dim col As Integer, row As Integer
+    Dim newPic As ShapeRange
+    
+    startX = 500 ' Jadvaldan o'ngroqda
+    startY = 80
+    imgW = 210
+    imgH = 150
+    gap = 10
+    
+    ' Agar rasmlar bor bo'lsa
+    If picCollection.Count > 0 Then
+        For i = 1 To picCollection.Count
+            If i > 4 Then Exit For ' Maksimum 4 ta rasm
+            
+            ' Rasmni nusxalab tashlash
+            picCollection(i).Copy
+            Set newPic = newSlide.Shapes.Paste
+            
+            ' Koordinata hisoblash (0,0 | 0,1 | 1,0 | 1,1)
+            row = (i - 1) \ 2
+            col = (i - 1) Mod 2
+            
+            With newPic
+                .LockAspectRatio = msoTrue
+                .Width = imgW
+                ' Agar bo'yi juda uzun bo'lsa, qirqamiz
+                If .Height > imgH Then
+                    .PictureFormat.CropBottom = .Height - imgH
+                End If
+                .Left = startX + (col * (imgW + gap))
+                .Top = startY + (row * (imgH + gap))
+                
+                ' Ramka
+                .Line.Visible = msoTrue
+                .Line.ForeColor.RGB = RGB(200, 200, 200)
+            End With
+        Next i
+    Else
+        ' Rasm yo'q bo'lsa xabar berish shart emas, davom etaveradi
+    End If
+    
+    MsgBox "Pasport tayyor!", vbInformation
+
+End Sub
+
+' --- YORDAMCHI FUNKSIYALAR ---
+Function CleanText(txt As String) As String
+    Dim t As String
+    t = Replace(txt, Chr(13), vbCr)
+    t = Replace(t, Chr(7), "")
+    t = Replace(t, vbVerticalTab, "")
+    CleanText = Trim(t)
+End Function
+
+Sub FillRow(tbl As Table, r As Integer, h As String, v As String, Optional b As Boolean = False)
+    tbl.Cell(r, 1).Shape.TextFrame.TextRange.Text = h
+    tbl.Cell(r, 2).Shape.TextFrame.TextRange.Text = v
+    If b Then tbl.Cell(r, 2).Shape.TextFrame.TextRange.Font.Bold = msoTrue
 End Sub
