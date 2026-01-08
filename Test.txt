@@ -1,4 +1,12 @@
-Sub PowerPointgaPasportTuzatilgan()
+' --- BU QISM ENG TEPADA TURISHI SHART ---
+#If VBA7 Then
+    Public Declare PtrSafe Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
+#Else
+    Public Declare Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
+#End If
+' ----------------------------------------
+
+Sub PowerPointgaPasportFinal()
     Dim pptApp As Object
     Dim pptPres As Object
     Dim pptSlide As Object
@@ -9,10 +17,7 @@ Sub PowerPointgaPasportTuzatilgan()
     Dim tbl As Object
     
     ' --- SOZLAMALAR ---
-    ' PowerPoint manzili:
     pptPath = "C:\Users\User\Desktop\Паспорт шаблон (002) (002).pptx" 
-    
-    ' Excel varaq nomi:
     Set excelSheet = ThisWorkbook.Sheets("TABLE")
     ' ------------------
 
@@ -25,65 +30,72 @@ Sub PowerPointgaPasportTuzatilgan()
     pptApp.Visible = True
     Set pptPres = pptApp.Presentations.Open(pptPath)
     
-    ' Excel oxirgi qatorini aniqlash
     lastRow = excelSheet.Cells(excelSheet.Rows.Count, 1).End(xlUp).Row
 
     ' --- SIKL ---
     For i = 2 To lastRow
         
-        ' Tizimga nafas olishga imkon beramiz (Xatolikni oldini oladi)
-        DoEvents 
-        
         ' 1. Slayddan nusxa olamiz
         pptPres.Slides(1).Duplicate
         
+        ' Xatolikni oldini olish uchun 0.5 soniya kutamiz (Majburiy)
+        DoEvents
+        Sleep 500 
+        
         ' Yangi slayd har doim 2-raqamda paydo bo'ladi
-        Set pptSlide = pptPres.Slides(2) 
+        Set pptSlide = pptPres.Slides(2)
         
         ' 2. Jadvalni topib to'ldiramiz
         For Each shp In pptSlide.Shapes
             If shp.HasTable Then
                 Set tbl = shp.Table
                 
-                ' --- QATORLARNI TO'G'RILADIM (2-qatordan boshlanadi) ---
+                ' --- QATORLAR (Endi 1-qatordan boshlaymiz) ---
                 
-                ' 1. Балансда сақlovchi (2-qator) <- Excel A (1)
-                tbl.Cell(2, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 1).Value
+                ' Agar yana xatolik bersa, demak jadval strukturasi boshqacha. 
+                ' Hozircha siz aytgandek 1 pog'ona yuqoriga surdim.
                 
-                ' 2. Мулк номи (3-qator) <- Excel B (2)
-                tbl.Cell(3, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 2).Value
+                ' 1. Балансда сақловчи (1-qator)
+                tbl.Cell(1, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 1).Value
                 
-                ' 3. Манзили (4-qator) <- Excel C (3)
-                tbl.Cell(4, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 3).Value
+                ' 2. Мулк номи (2-qator)
+                tbl.Cell(2, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 2).Value
                 
-                ' 4. Майдони (5-qator) <- Excel D (4)
-                tbl.Cell(5, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 4).Value
+                ' 3. Манзили (3-qator)
+                tbl.Cell(3, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 3).Value
                 
-                ' 5. Тавсифи (6-qator) <- Excel E (5)
-                tbl.Cell(6, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 5).Value
+                ' 4. Майдони (4-qator)
+                tbl.Cell(4, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 4).Value
                 
-                ' 6. Коммуникация (7-qator) <- Excel F (6)
-                tbl.Cell(7, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 6).Value
+                ' 5. Тавсифи (5-qator)
+                tbl.Cell(5, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 5).Value
                 
-                ' 7. Ҳолати (8-qator) <- Excel G (7)
-                tbl.Cell(8, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 7).Value
+                ' 6. Коммуникация (6-qator)
+                tbl.Cell(6, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 6).Value
                 
-                ' 8. Сана (9-qator) <- Excel H (8)
-                tbl.Cell(9, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 8).Value
+                ' 7. Ҳолати (7-qator)
+                tbl.Cell(7, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 7).Value
                 
-                ' 9. Қиймати (10-qator) <- Excel I (9)
-                tbl.Cell(10, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 9).Value
+                ' 8. Сана (8-qator)
+                tbl.Cell(8, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 8).Value
                 
-                ' 10. Шартлари (11-qator) <- Excel J (10)
-                tbl.Cell(11, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 10).Value
+                ' 9. Қиймати (9-qator)
+                tbl.Cell(9, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 9).Value
+                
+                ' 10. Шартлари (10-qator)
+                tbl.Cell(10, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 10).Value
                 
             End If
         Next shp
         
-        ' 3. Tayyor slaydni eng oxiriga tashlaymiz
+        ' 3. Tayyor slaydni oxiriga tashlaymiz
         pptSlide.MoveTo toPos:=pptPres.Slides.Count
+        
+        ' Yana ozgina kutamiz, keyingi aylanaga o'tishdan oldin
+        DoEvents
+        Sleep 200
         
     Next i
 
-    MsgBox "Tayyor! Hammasi joyiga tushdi.", vbInformation
+    MsgBox "Tayyor! Xatoliksiz tugadi.", vbInformation
 End Sub
