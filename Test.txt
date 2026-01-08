@@ -1,113 +1,85 @@
-Sub PowerPointgaPasportYaratis()
+Sub PowerPointgaAniqYozish()
     Dim pptApp As Object
     Dim pptPres As Object
     Dim pptSlide As Object
     Dim excelSheet As Worksheet
-    Dim lastRow As Long
-    Dim i As Long
+    Dim lastRow As Long, i As Long
     Dim pptPath As String
-    Dim shablonSlideIndex As Integer
+    Dim shp As Object
+    Dim tbl As Object
     
     ' --- SOZLAMALAR ---
-    ' PowerPoint shabloningiz manzilini aniq kiriting:
+    ' PowerPoint manzili:
     pptPath = "C:\Users\User\Desktop\Паспорт шаблон (002) (002).pptx" 
     
-    ' Excel varaq nomi ("TABLE" ekanligiga ishonch hosil qiling)
+    ' Excel varaq nomi:
     Set excelSheet = ThisWorkbook.Sheets("TABLE")
-    shablonSlideIndex = 1
     ' ------------------
 
-    If Dir(pptPath) = "" Then
-        MsgBox "Fayl topilmadi! Manzilni tekshiring.", vbCritical
-        Exit Sub
-    End If
+    If Dir(pptPath) = "" Then MsgBox "Fayl topilmadi!", vbCritical: Exit Sub
 
     On Error Resume Next
     Set pptApp = GetObject(, "PowerPoint.Application")
-    If Err.Number <> 0 Then
-        Set pptApp = CreateObject("PowerPoint.Application")
-    End If
+    If Err.Number <> 0 Then Set pptApp = CreateObject("PowerPoint.Application")
     On Error GoTo 0
     
     pptApp.Visible = True
     Set pptPres = pptApp.Presentations.Open(pptPath)
-
     lastRow = excelSheet.Cells(excelSheet.Rows.Count, 1).End(xlUp).Row
 
-    ' --- ASOSIY SIKL ---
+    ' --- SIKL ---
     For i = 2 To lastRow
         
-        ' 1. Slayddan nusxa olish
-        pptPres.Slides(shablonSlideIndex).Duplicate
+        ' 1. Slayddan nusxa olamiz
+        pptPres.Slides(1).Duplicate
+        Set pptSlide = pptPres.Slides(2) ' Har doim 2-slayd bilan ishlaymiz (chunki 1 bu shablon)
         
-        ' 2. Yangi slayd bilan ishlash
-        Set pptSlide = pptPres.Slides(shablonSlideIndex + 1)
+        ' 2. Slayddagi jadvalni topamiz
+        For Each shp In pptSlide.Shapes
+            If shp.HasTable Then
+                Set tbl = shp.Table
+                
+                ' DIQQAT: Bu yerda qaysi qatorga nima yozilishi ko'rsatilgan.
+                ' Rasmga qarab sanab chiqdim (Sizda 1-qator bu sarlavha).
+                ' (Row = Qator, Column = Ustun)
+                
+                ' Балансда сақловчи (3-qator, 2-ustun) <- Excel A ustun (1)
+                tbl.Cell(3, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 1).Value
+                
+                ' Мулк номи (4-qator, 2-ustun) <- Excel B ustun (2)
+                tbl.Cell(4, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 2).Value
+                
+                ' Манзили (5-qator, 2-ustun) <- Excel C ustun (3)
+                tbl.Cell(5, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 3).Value
+                
+                ' Майдони (6-qator, 2-ustun) <- Excel D ustun (4)
+                tbl.Cell(6, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 4).Value
+                
+                ' Тавсифи (7-qator, 2-ustun) <- Excel E ustun (5)
+                tbl.Cell(7, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 5).Value
+                
+                ' Коммуникация (8-qator, 2-ustun) <- Excel F ustun (6)
+                tbl.Cell(8, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 6).Value
+                
+                ' Ҳолати (9-qator, 2-ustun) <- Excel G ustun (7)
+                tbl.Cell(9, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 7).Value
+                
+                ' Сана (10-qator, 2-ustun) <- Excel H ustun (8)
+                tbl.Cell(10, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 8).Value
+                
+                ' Қиймати (11-qator, 2-ustun) <- Excel I ustun (9)
+                tbl.Cell(11, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 9).Value
+                
+                ' Shartlari (12-qator, 2-ustun) <- Excel J ustun (10)
+                tbl.Cell(12, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 10).Value
+                
+            End If
+        Next shp
         
-        ' 3. Ma'lumotlarni almashtirish (Jadval ichini ham qidiradi)
-        Call TextAlmashtir(pptSlide, "{SAQLOVCHI}", excelSheet.Cells(i, 1).Value)
-        Call TextAlmashtir(pptSlide, "{NOM}", excelSheet.Cells(i, 2).Value)
-        Call TextAlmashtir(pptSlide, "{MANZIL}", excelSheet.Cells(i, 3).Value)
-        Call TextAlmashtir(pptSlide, "{MAYDON}", excelSheet.Cells(i, 4).Value)
-        Call TextAlmashtir(pptSlide, "{TAVSIF}", excelSheet.Cells(i, 5).Value)
-        Call TextAlmashtir(pptSlide, "{KOM}", excelSheet.Cells(i, 6).Value)
-        Call TextAlmashtir(pptSlide, "{HOLAT}", excelSheet.Cells(i, 7).Value)
-        Call TextAlmashtir(pptSlide, "{SANA}", excelSheet.Cells(i, 8).Value)
-        Call TextAlmashtir(pptSlide, "{QIYMAT}", excelSheet.Cells(i, 9).Value)
-        Call TextAlmashtir(pptSlide, "{SHART}", excelSheet.Cells(i, 10).Value)
-        
-        ' Slaydni oxiriga ko'chirish
+        ' 3. Tayyor slaydni oxiriga tashlaymiz
         pptSlide.MoveTo toPos:=pptPres.Slides.Count
         
     Next i
 
-    MsgBox "Tayyor! " & (lastRow - 1) & " ta pasport to'ldirildi.", vbInformation
-
-End Sub
-
-' --- YANGILANGAN FUNKSIYA (Jadvallar uchun) ---
-Sub TextAlmashtir(slide As Object, findText As String, replaceText As String)
-    Dim shp As Object
-    Dim txtRng As Object
-    Dim r As Long, c As Long
-    
-    If IsNull(replaceText) Then replaceText = ""
-    
-    ' Slayddagi barcha shakllarni aylanamiz
-    For Each shp In slide.Shapes
-        
-        ' 1-HOLAT: Agar bu oddiy yozuv bo'lsa
-        If shp.HasTextFrame Then
-            If shp.TextFrame.HasText Then
-                shp.TextFrame.TextRange.Replace FindWhat:=findText, _
-                               ReplaceWhat:=replaceText, WholeWords:=False
-            End If
-        End If
-        
-        ' 2-HOLAT: Agar bu JADVAL (Table) bo'lsa (Sizdagi holat shu!)
-        If shp.HasTable Then
-            For r = 1 To shp.Table.Rows.Count
-                For c = 1 To shp.Table.Columns.Count
-                    ' Har bir katak ichini tekshiramiz
-                    If shp.Table.Cell(r, c).Shape.TextFrame.HasText Then
-                        shp.Table.Cell(r, c).Shape.TextFrame.TextRange.Replace _
-                            FindWhat:=findText, ReplaceWhat:=replaceText, WholeWords:=False
-                    End If
-                Next c
-            Next r
-        End If
-        
-        ' 3-HOLAT: Agar guruhlangan (Group) bo'lsa
-        If shp.Type = 6 Then ' msoGroup
-            Dim subShp As Object
-            For Each subShp In shp.GroupItems
-                If subShp.HasTextFrame Then
-                    If subShp.TextFrame.HasText Then
-                        subShp.TextFrame.TextRange.Replace FindWhat:=findText, _
-                            ReplaceWhat:=replaceText, WholeWords:=False
-                    End If
-                End If
-            Next subShp
-        End If
-        
-    Next shp
+    MsgBox "Bajarildi!", vbInformation
 End Sub
