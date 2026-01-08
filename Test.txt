@@ -6,7 +6,7 @@
 #End If
 ' ------------------
 
-Sub PasportUniversalRasmli()
+Sub PasportAniqRasmli()
     Dim pptApp As Object
     Dim targetPres As Object, sourcePres As Object
     Dim pptSlide As Object
@@ -35,7 +35,7 @@ Sub PasportUniversalRasmli()
     lastRow = excelSheet.Cells(excelSheet.Rows.Count, 1).End(xlUp).Row
 
     For i = 2 To lastRow
-        DoEvents: Sleep 100
+        DoEvents ' Excel qotib qolmasligi uchun
         
         ' 1. Slayd yaratish
         targetPres.Slides(1).Duplicate
@@ -45,6 +45,7 @@ Sub PasportUniversalRasmli()
         For Each shp In pptSlide.Shapes
             If shp.HasTable Then
                 Set tbl = shp.Table
+                ' Jadval kataklarini to'ldirish
                 tbl.Cell(1, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 1).Value
                 tbl.Cell(2, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 2).Value
                 tbl.Cell(3, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 3).Value
@@ -67,20 +68,20 @@ Sub PasportUniversalRasmli()
             isFound = RasmlarniTopVaJoyla(sourcePres, pptSlide, vinCode)
         End If
         
-        ' Agar rasm topilmasa, Excelga yozib qo'yadi
-        If isFound = False Then
-            excelSheet.Cells(i, 12).Value = "Rasm Topilmadi"
-        Else
+        ' Status yozish
+        If isFound Then
             excelSheet.Cells(i, 12).Value = "OK"
+        Else
+            excelSheet.Cells(i, 12).Value = "Rasm Topilmadi"
         End If
         
         pptSlide.MoveTo toPos:=targetPres.Slides.Count
     Next i
 
-    MsgBox "Tugadi! Exceldagi L ustuniga qarang, qaysi biri o'tmagan bo'lsa yozildi.", vbInformation
+    MsgBox "Jarayon tugadi!", vbInformation
 End Sub
 
-' --- KUCHAYTIRILGAN QIDIRUV FUNKSIYASI ---
+' --- QAT'IY QIDIRUV FUNKSIYASI ---
 Function RasmlarniTopVaJoyla(sourcePres As Object, targetSlide As Object, cleanVin As String) As Boolean
     Dim sld As Object
     Dim shp As Object
@@ -97,12 +98,13 @@ Function RasmlarniTopVaJoyla(sourcePres As Object, targetSlide As Object, cleanV
     Dim startTop As Double: startTop = 80
     
     Set foundSlide = Nothing
-    RasmlarniTopVaJoyla = False ' Boshlanishida topilmadi deb turamiz
+    RasmlarniTopVaJoyla = False
     
-    ' 1. SLAYDNI QIDIRISH
+    ' 1. SLAYDNI QIDIRISH (Jadvallar ichidan ham qidiradi, lekin ko'chirmaydi)
     For Each sld In sourcePres.Slides
-        ' Oddiy matnlarni tekshirish
         For Each shp In sld.Shapes
+            
+            ' A) Oddiy matnlarda qidirish
             If shp.HasTextFrame Then
                 If shp.TextFrame.HasText Then
                     slideText = Replace(shp.TextFrame.TextRange.Text, " ", "")
@@ -112,7 +114,8 @@ Function RasmlarniTopVaJoyla(sourcePres As Object, targetSlide As Object, cleanV
                     End If
                 End If
             End If
-            ' Jadval ichini tekshirish
+            
+            ' B) Jadval ichidan qidirish (Sizdagi VIN jadvalda bo'lishi mumkin)
             If shp.HasTable Then
                 For r = 1 To shp.Table.Rows.Count
                     For c = 1 To shp.Table.Columns.Count
@@ -130,47 +133,41 @@ Function RasmlarniTopVaJoyla(sourcePres As Object, targetSlide As Object, cleanV
         If Not foundSlide Is Nothing Then Exit For
     Next sld
     
-    ' 2. RASMLARNI KO'CHIRISH
+    ' 2. RASMLARNI KO'CHIRISH (Endi faqat va faqat rasmni oladi)
     If Not foundSlide Is Nothing Then
-        RasmlarniTopVaJoyla = True ' Slayd topildi!
+        RasmlarniTopVaJoyla = True
         picCount = 0
         
         For Each shp In foundSlide.Shapes
-            ' DIQQAT: Bu yerda faqat "Rasm" emas, barcha shubhali obyektlarni olamiz
-            ' Type 13 = Picture
-            ' Type 14 = Placeholder (Ko'pincha rasm shuning ichida bo'ladi)
-            ' Type 7 = Embedded Object
-            ' Type 6 = Group (Agar rasmlar gruppalangan bo'lsa)
+            Dim isRealImage As Boolean
+            isRealImage = False
             
-            Dim isTargetImage As Boolean
-            isTargetImage = False
+            ' --- FILTR (Eng muhim joyi) ---
             
-            ' Agar shakl ichida matn bo'lmasa, uni rasm deb taxmin qilamiz
-            If Not shp.HasTextFrame Then
-                isTargetImage = True
-            Else
-                If Not shp.TextFrame.HasText Then isTargetImage = True
+            ' 1. Agar JADVAL bo'lsa -> O'tib ketamiz (Ko'chirmaymiz)
+            If shp.HasTable Then GoTo KeyingiShakl
+            
+            ' 2. Agar YOZUV (Text Box) bo'lsa -> O'tib ketamiz
+            If shp.HasTextFrame Then GoTo KeyingiShakl
+            
+            ' 3. Faqat "Picture" (13) turini olamiz
+            If shp.Type = 13 Then 
+                isRealImage = True
             End If
             
-            ' Yoki aniq turlarini tekshiramiz
-            If shp.Type = 13 Or shp.Type = 14 Or shp.Type = 7 Or shp.Type = 6 Then
-                isTargetImage = True
+            ' 4. Yoki "Picture Placeholder" (14) bo'lsa va ichida rasm bo'lsa
+            If shp.Type = 14 Then
+                ' 18 = ppPlaceholderPicture
+                If shp.PlaceholderFormat.ContainedType = 18 Then isRealImage = True
             End If
-            
-            ' Sarlavha yoki Slide Numberlarni ko'chirmaslik uchun
-            If shp.Type = 14 Then ' Placeholder bo'lsa
-                If shp.PlaceholderFormat.Type = 1 Or shp.PlaceholderFormat.Type = 3 Then ' Title / Slide Text
-                    isTargetImage = False
-                End If
-            End If
-            
+
             ' --- NUSXA OLISH ---
-            If isTargetImage Then
+            If isRealImage = True Then
                 shp.Copy
                 DoEvents
-                Sleep 400 ' Kutish vaqtini oshirdim
+                Sleep 300 ' Buferga tushishini kutish
                 
-                On Error Resume Next ' Xatolik bo'lsa o'tib ketsin
+                On Error Resume Next
                 targetSlide.Shapes.Paste
                 
                 If Err.Number = 0 Then
@@ -200,6 +197,8 @@ Function RasmlarniTopVaJoyla(sourcePres As Object, targetSlide As Object, cleanV
                 
                 If picCount >= 4 Then Exit For
             End If
+            
+KeyingiShakl:
         Next shp
     End If
 End Function
