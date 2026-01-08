@@ -1,1 +1,90 @@
+Sub JadvalniOzgartirish()
+    Dim oSlide As Slide
+    Dim oShape As Shape
+    Dim oTable As Table
+    Dim newSlide As Slide
+    Dim carInfo As String, clientName As String, balanceDate As String, balanceValue As String
+    
+    ' 1. Aktiv slayddagi jadvalni topish
+    Set oSlide = ActiveWindow.View.Slide
+    
+    For Each oShape In oSlide.Shapes
+        If oShape.HasTable Then
+            Set oTable = oShape.Table
+            Exit For
+        End If
+    Next oShape
+    
+    If oTable Is Nothing Then
+        MsgBox "Slaydda jadval topilmadi!", vbExclamation
+        Exit Sub
+    End If
+    
+    ' 2. Eski jadvaldan ma'lumotlarni o'qib olish (Mapping)
+    ' 1-rasmdagi qatorlarga qarab olingan:
+    
+    ' Mijoz nomi (1-qator, 2-ustun) + Headerdagi Bank nomi
+    clientName = oTable.Cell(1, 2).Shape.TextFrame.TextRange.Text
+    
+    ' Avtomobil ma'lumotlari (6-qator, 2-ustun - Cobalt, 2020, nomer va h.k.)
+    carInfo = oTable.Cell(6, 2).Shape.TextFrame.TextRange.Text
+    
+    ' Balansga olingan sana (7-qator, 1-band) - matnni tozalash kerak bo'ladi
+    balanceDate = oTable.Cell(7, 2).Shape.TextFrame.TextRange.Text
+    
+    ' Balans qiymati (8-qator)
+    balanceValue = oTable.Cell(8, 2).Shape.TextFrame.TextRange.Text
+
+    ' 3. Yangi slayd yaratish (yoki shablon asosida)
+    ' Bu yerda oddiy yangi slayd ochamiz va text boxlar yaratamiz
+    Set newSlide = ActivePresentation.Slides.Add(oSlide.SlideIndex + 1, ppLayoutBlank)
+    
+    ' --- OBYEKT PASPORTI jadvalini chizish ---
+    
+    ' Sarlavha
+    CreateTextBox newSlide, "MULK TO'LIQ NOMI: " & Split(carInfo, vbCr)(0), 50, 20, 600, 40, True
+    
+    ' Jadval yaratish (2-rasmdagi kabi)
+    Dim newTable As Shape
+    Set newTable = newSlide.Shapes.AddTable(9, 2, 50, 80, 400, 300)
+    
+    With newTable.Table
+        ' Ustun kengliklarini to'g'irlash
+        .Columns(1).Width = 120
+        .Columns(2).Width = 280
+        
+        ' Qatorlarni to'ldirish (Hardkod qilingan mapping)
+        .Cell(1, 1).Shape.TextFrame.TextRange.Text = "Balansda saqlovchi"
+        .Cell(1, 2).Shape.TextFrame.TextRange.Text = clientName ' Eski jadvaldan olindi
+        
+        .Cell(2, 1).Shape.TextFrame.TextRange.Text = "Mulk nomi"
+        ' Bu yerda carInfo ichidan birinchi qatorni (Cobalt) ajratib olish mumkin
+        .Cell(2, 2).Shape.TextFrame.TextRange.Text = Split(carInfo, vbCr)(0)
+        
+        .Cell(5, 1).Shape.TextFrame.TextRange.Text = "Tavsifi"
+        .Cell(5, 2).Shape.TextFrame.TextRange.Text = carInfo ' To'liq info
+        
+        .Cell(8, 1).Shape.TextFrame.TextRange.Text = "Balansga olingan sana"
+        .Cell(8, 2).Shape.TextFrame.TextRange.Text = balanceDate
+        
+        .Cell(9, 1).Shape.TextFrame.TextRange.Text = "Balans qiymati"
+        .Cell(9, 2).Shape.TextFrame.TextRange.Text = balanceValue
+    End With
+    
+    ' Dizayn berish (Oddiyroq ko'rinish uchun)
+    newTable.Table.ApplyStyle "{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}" ' Standart stil
+    
+    MsgBox "Yangi slayd yaratildi va ma'lumotlar ko'chirildi!", vbInformation
+
+End Sub
+
+' Yordamchi funksiya: Text Box yaratish uchun
+Sub CreateTextBox(sld As Slide, txt As String, L As Single, T As Single, W As Single, H As Single, Optional isBold As Boolean = False)
+    Dim shp As Shape
+    Set shp = sld.Shapes.AddTextbox(msoTextOrientationHorizontal, L, T, W, H)
+    shp.TextFrame.TextRange.Text = txt
+    If isBold Then shp.TextFrame.TextRange.Font.Bold = msoTrue
+    shp.TextFrame.TextRange.Font.Size = 14
+    shp.Fill.ForeColor.RGB = RGB(220, 230, 241) ' Och ko'k fon
+End Sub
 
