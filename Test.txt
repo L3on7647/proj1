@@ -1,10 +1,10 @@
-' --- BU QISMNI HECH NARSA O'ZGARTIRMASDAN KO'CHIRING ---
+' --- BU QISMNI ENG TEPAGA YOZISH SHART ---
 #If VBA7 Then
     Private Declare PtrSafe Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
 #Else
     Private Declare Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
 #End If
-' -------------------------------------------------------
+' -----------------------------------------
 
 Sub PowerPointgaPasportFinal()
     Dim pptApp As Object
@@ -24,10 +24,12 @@ Sub PowerPointgaPasportFinal()
     Set excelSheet = ThisWorkbook.Sheets("TABLE")
     ' ------------------
 
-    ' PowerPointni ochish
+    ' PowerPointni xavfsiz ochish
     On Error Resume Next
     Set pptApp = GetObject(, "PowerPoint.Application")
-    If Err.Number <> 0 Then Set pptApp = CreateObject("PowerPoint.Application")
+    If Err.Number <> 0 Then
+        Set pptApp = CreateObject("PowerPoint.Application")
+    End If
     On Error GoTo 0
     
     pptApp.Visible = True
@@ -41,7 +43,7 @@ Sub PowerPointgaPasportFinal()
         ' 1. Slayddan nusxa olamiz
         pptPres.Slides(1).Duplicate
         
-        ' Xatolikni oldini olish uchun biroz kutamiz
+        ' Kompyuterga dam beramiz (Xatolikni oldini oladi)
         DoEvents
         Sleep 500 
         
@@ -53,9 +55,12 @@ Sub PowerPointgaPasportFinal()
             If shp.HasTable Then
                 Set tbl = shp.Table
                 
-                ' --- QATORLAR (Jadvalingizning 1-qatoridan boshlab yozadi) ---
+                ' --- QATORLAR ---
+                ' Sarlavha (ko'k rangli) hisobga olinmaydi, 
+                ' chunki u jadval ichida emas, alohida figura bo'lishi mumkin.
+                ' Shuning uchun 1-qatordan boshlaymiz:
                 
-                ' 1. Балансда сақlovchi
+                ' 1. Балансда сақловчи
                 tbl.Cell(1, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 1).Value
                 
                 ' 2. Мулк номи
@@ -97,5 +102,5 @@ Sub PowerPointgaPasportFinal()
         
     Next i
 
-    MsgBox "Tayyor! Barcha pasportlar yaratildi.", vbInformation
+    MsgBox "Tayyor! Hammasi tugadi.", vbInformation
 End Sub
