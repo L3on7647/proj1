@@ -1,90 +1,125 @@
-Sub JadvalniOzgartirish()
-    Dim oSlide As Slide
-    Dim oShape As Shape
-    Dim oTable As Table
-    Dim newSlide As Slide
-    Dim carInfo As String, clientName As String, balanceDate As String, balanceValue As String
+Sub MakePassportStyle()
+    Dim sld As Slide
+    Dim shp As Shape
+    Dim srcTable As Table
+    Dim targetSlide As Slide
+    Dim targetTable As Table
     
-    ' 1. Aktiv slayddagi jadvalni topish
-    Set oSlide = ActiveWindow.View.Slide
+    Dim clientName As String
+    Dim carFullInfo As String
+    Dim carName As String
+    Dim balanceDate As String
+    Dim balanceValue As String
+    Dim lastCol As Integer
     
-    For Each oShape In oSlide.Shapes
-        If oShape.HasTable Then
-            Set oTable = oShape.Table
-            Exit For
-        End If
-    Next oShape
-    
-    If oTable Is Nothing Then
-        MsgBox "Slaydda jadval topilmadi!", vbExclamation
+    ' 1. BELGILANGAN JADVALNI OLISH
+    On Error Resume Next
+    If ActiveWindow.Selection.Type <> ppSelectionShapes Then
+        MsgBox "Iltimos, avval 1-rasmdagi ESKI JADVALNI tanlang!", vbExclamation
         Exit Sub
     End If
+    Set shp = ActiveWindow.Selection.ShapeRange(1)
+    If shp.HasTable Then
+        Set srcTable = shp.Table
+    Else
+        MsgBox "Bu jadval emas!", vbCritical
+        Exit Sub
+    End If
+    On Error GoTo 0
     
-    ' 2. Eski jadvaldan ma'lumotlarni o'qib olish (Mapping)
-    ' 1-rasmdagi qatorlarga qarab olingan:
+    ' 2. MA'LUMOTLARNI SUG'URIB OLISH
+    ' Oxirgi ustunni topamiz (odatda ma'lumotlar o'ng chekkada bo'ladi)
+    lastCol = srcTable.Columns.Count
     
-    ' Mijoz nomi (1-qator, 2-ustun) + Headerdagi Bank nomi
-    clientName = oTable.Cell(1, 2).Shape.TextFrame.TextRange.Text
+    ' A) MIJOZ NOMI (Header yoki 1-qator)
+    ' 1-rasmda ko'k fonda "RIVOJIDDINOVA G.B." turibdi. Bu odatda Cell(1,1) yoki Cell(1,2)
+    clientName = CleanText(srcTable.Cell(1, 2).Shape.TextFrame.TextRange.Text)
+    ' Agar bo'sh bo'lsa, 1-qator 1-katakni tekshiramiz (merged bo'lsa)
+    If Len(clientName) < 3 Then clientName = CleanText(srcTable.Cell(1, 1).Shape.TextFrame.TextRange.Text)
     
-    ' Avtomobil ma'lumotlari (6-qator, 2-ustun - Cobalt, 2020, nomer va h.k.)
-    carInfo = oTable.Cell(6, 2).Shape.TextFrame.TextRange.Text
+    ' B) MASHINA HAQIDA (6-qator oxirgi ustun)
+    carFullInfo = CleanText(srcTable.Cell(6, lastCol).Shape.TextFrame.TextRange.Text)
     
-    ' Balansga olingan sana (7-qator, 1-band) - matnni tozalash kerak bo'ladi
-    balanceDate = oTable.Cell(7, 2).Shape.TextFrame.TextRange.Text
+    ' C) BALANS SANASI (7-qator)
+    balanceDate = CleanText(srcTable.Cell(7, lastCol).Shape.TextFrame.TextRange.Text)
     
-    ' Balans qiymati (8-qator)
-    balanceValue = oTable.Cell(8, 2).Shape.TextFrame.TextRange.Text
+    ' D) BALANS QIYMATI (8-qator)
+    balanceValue = CleanText(srcTable.Cell(8, lastCol).Shape.TextFrame.TextRange.Text)
+    
+    ' E) MULK NOMI (faqat birinchi qatorni ajratib olish - "CHEVROLET COBALT")
+    If InStr(carFullInfo, vbCr) > 0 Then
+        carName = Split(carFullInfo, vbCr)(0)
+    Else
+        carName = Split(carFullInfo, " ")(0) & " " & Split(carFullInfo, " ")(1)
+    End If
 
-    ' 3. Yangi slayd yaratish (yoki shablon asosida)
-    ' Bu yerda oddiy yangi slayd ochamiz va text boxlar yaratamiz
-    Set newSlide = ActivePresentation.Slides.Add(oSlide.SlideIndex + 1, ppLayoutBlank)
+    ' 3. YANGI SLAYD VA DIZAYN (2-RASMDAGI KABI)
+    Set targetSlide = ActivePresentation.Slides.Add(ActiveWindow.View.Slide.SlideIndex + 1, ppLayoutBlank)
     
-    ' --- OBYEKT PASPORTI jadvalini chizish ---
+    ' Sarlavha (Ko'k fon bilan)
+    Dim titleBox As Shape
+    Set titleBox = targetSlide.Shapes.AddTextbox(msoTextOrientationHorizontal, 30, 20, 650, 40)
+    With titleBox
+        .Fill.ForeColor.RGB = RGB(141, 180, 226) ' Och ko'k
+        .TextFrame.TextRange.Text = "OBYEKT PASPORTI"
+        .TextFrame.TextRange.Font.Bold = msoTrue
+        .TextFrame.TextRange.ParagraphFormat.Alignment = ppAlignCenter
+        .TextFrame.VerticalAnchor = msoAnchorMiddle
+    End With
+
+    ' 4. YANGI JADVAL CHIZISH
+    Set shp = targetSlide.Shapes.AddTable(8, 2, 30, 70, 400, 350)
+    Set targetTable = shp.Table
     
-    ' Sarlavha
-    CreateTextBox newSlide, "MULK TO'LIQ NOMI: " & Split(carInfo, vbCr)(0), 50, 20, 600, 40, True
-    
-    ' Jadval yaratish (2-rasmdagi kabi)
-    Dim newTable As Shape
-    Set newTable = newSlide.Shapes.AddTable(9, 2, 50, 80, 400, 300)
-    
-    With newTable.Table
-        ' Ustun kengliklarini to'g'irlash
-        .Columns(1).Width = 120
-        .Columns(2).Width = 280
+    With targetTable
+        ' Ustun kengliklari
+        .Columns(1).Width = 130
+        .Columns(2).Width = 270
         
-        ' Qatorlarni to'ldirish (Hardkod qilingan mapping)
+        ' 1-Qator: Balansda saqlovchi
         .Cell(1, 1).Shape.TextFrame.TextRange.Text = "Balansda saqlovchi"
-        .Cell(1, 2).Shape.TextFrame.TextRange.Text = clientName ' Eski jadvaldan olindi
+        .Cell(1, 2).Shape.TextFrame.TextRange.Text = clientName
+        .Cell(1, 2).Shape.TextFrame.TextRange.Font.Bold = msoTrue
         
+        ' 2-Qator: Mulk nomi
         .Cell(2, 1).Shape.TextFrame.TextRange.Text = "Mulk nomi"
-        ' Bu yerda carInfo ichidan birinchi qatorni (Cobalt) ajratib olish mumkin
-        .Cell(2, 2).Shape.TextFrame.TextRange.Text = Split(carInfo, vbCr)(0)
+        .Cell(2, 2).Shape.TextFrame.TextRange.Text = carName
         
+        ' 3-Qator: Manzili (Bo'sh qoladi, chunki 1-rasmda yo'q)
+        .Cell(3, 1).Shape.TextFrame.TextRange.Text = "Manzili"
+        
+        ' 4-Qator: Maydoni (Bo'sh)
+        .Cell(4, 1).Shape.TextFrame.TextRange.Text = "Maydoni"
+        
+        ' 5-Qator: Tavsifi (To'liq info shu yerga)
         .Cell(5, 1).Shape.TextFrame.TextRange.Text = "Tavsifi"
-        .Cell(5, 2).Shape.TextFrame.TextRange.Text = carInfo ' To'liq info
+        .Cell(5, 2).Shape.TextFrame.TextRange.Text = carFullInfo
+        .Cell(5, 2).Shape.TextFrame.TextRange.Font.Size = 10
         
-        .Cell(8, 1).Shape.TextFrame.TextRange.Text = "Balansga olingan sana"
-        .Cell(8, 2).Shape.TextFrame.TextRange.Text = balanceDate
+        ' 6-Qator: Holati (Qoniqarli deb qo'yamiz standart)
+        .Cell(6, 1).Shape.TextFrame.TextRange.Text = "Holati"
+        .Cell(6, 2).Shape.TextFrame.TextRange.Text = "Qoniqarli"
         
-        .Cell(9, 1).Shape.TextFrame.TextRange.Text = "Balans qiymati"
-        .Cell(9, 2).Shape.TextFrame.TextRange.Text = balanceValue
+        ' 7-Qator: Sana
+        .Cell(7, 1).Shape.TextFrame.TextRange.Text = "Balansga olingan sana"
+        .Cell(7, 2).Shape.TextFrame.TextRange.Text = balanceDate
+        
+        ' 8-Qator: Qiymat
+        .Cell(8, 1).Shape.TextFrame.TextRange.Text = "Balans qiymati"
+        .Cell(8, 2).Shape.TextFrame.TextRange.Text = balanceValue
+        
+        ' Dizayn berish (Chiziqlar va rang)
+        .ApplyStyle "{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}" 
     End With
     
-    ' Dizayn berish (Oddiyroq ko'rinish uchun)
-    newTable.Table.ApplyStyle "{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}" ' Standart stil
-    
-    MsgBox "Yangi slayd yaratildi va ma'lumotlar ko'chirildi!", vbInformation
-
+    MsgBox "Tayyor! Yangi slaydga qarang.", vbInformation
 End Sub
 
-' Yordamchi funksiya: Text Box yaratish uchun
-Sub CreateTextBox(sld As Slide, txt As String, L As Single, T As Single, W As Single, H As Single, Optional isBold As Boolean = False)
-    Dim shp As Shape
-    Set shp = sld.Shapes.AddTextbox(msoTextOrientationHorizontal, L, T, W, H)
-    shp.TextFrame.TextRange.Text = txt
-    If isBold Then shp.TextFrame.TextRange.Font.Bold = msoTrue
-    shp.TextFrame.TextRange.Font.Size = 14
-    shp.Fill.ForeColor.RGB = RGB(220, 230, 241) ' Och ko'k fon
-End Sub
-
+' Matnni tozalovchi funksiya
+Function CleanText(txt As String) As String
+    Dim temp As String
+    temp = Replace(txt, Chr(13), vbCr) ' Enterlarni to'g'irlash
+    temp = Replace(temp, Chr(7), "")   ' Jadval belgisini olib tashlash
+    temp = Trim(temp)
+    CleanText = temp
+End Function
