@@ -1,4 +1,4 @@
-Sub DamasStilidaRasmlar()
+Sub DamasKirillcha()
     Dim srcSlide As Slide
     Dim newSlide As Slide
     Dim shp As Shape
@@ -8,18 +8,12 @@ Sub DamasStilidaRasmlar()
     ' 1. Hozirgi slaydni aniqlash
     Set srcSlide = ActiveWindow.View.Slide
     
-    ' 2. Slayddagi BARCHA rasmlarni yig'ish
-    ' (Bu kod slayddagi har bir burchakni tekshiradi)
+    ' 2. Rasmlarni yig'ish (Guruhlangan yoki Placeholder ichida bo'lsa ham topadi)
     For Each shp In srcSlide.Shapes
-        ' Agar oddiy rasm bo'lsa
         If shp.Type = msoPicture Or shp.Type = msoLinkedPicture Then
             picColl.Add shp
-        ' Agar Placeholder ichidagi rasm bo'lsa
         ElseIf shp.Type = msoPlaceholder Then
-            If shp.PlaceholderFormat.ContainedType = msoPicture Then
-                picColl.Add shp
-            End If
-        ' Agar Rasmlar guruhlangan (Group) bo'lsa, ichiga kirib olamiz
+            If shp.PlaceholderFormat.ContainedType = msoPicture Then picColl.Add shp
         ElseIf shp.Type = msoGroup Then
             Dim subShp As Shape
             For Each subShp In shp.GroupItems
@@ -28,88 +22,105 @@ Sub DamasStilidaRasmlar()
         End If
     Next shp
     
-    ' Agar rasm topilmasa, ogohlantiramiz
     If picColl.Count = 0 Then
-        MsgBox "Diqqat! Bu slaydda birorta ham rasm topilmadi. Rasmlar rasm formatidami?", vbExclamation
+        MsgBox "Rasm topilmadi!", vbExclamation
         Exit Sub
     End If
 
-    ' 3. YANGI SLAYD VA SHABLONNI CHIZISH
+    ' 3. YANGI SLAYD OCHISH
     Set newSlide = ActivePresentation.Slides.Add(srcSlide.SlideIndex + 1, ppLayoutBlank)
     
-    ' A) Ko'k Sarlavha
+    ' --- SARLAVHA (Kirillcha) ---
     Dim titleBox As Shape
-    Set titleBox = newSlide.Shapes.AddTextbox(msoTextOrientationHorizontal, 0, 20, 960, 40) ' Butun eniga
+    Set titleBox = newSlide.Shapes.AddTextbox(msoTextOrientationHorizontal, 0, 20, 960, 50)
     With titleBox
-        .Fill.ForeColor.RGB = RGB(180, 200, 230) ' Och ko'k fon
-        .TextFrame.TextRange.Text = "OBYEKT PASPORTI" ' Sarlavha
+        .Fill.ForeColor.RGB = RGB(141, 180, 226) ' Damas foniga o'xshash ko'k
+        .TextFrame.TextRange.Text = "ОБЪЕКТ ПАСПОРТИ"
+        .TextFrame.TextRange.Font.Name = "Calibri"
         .TextFrame.TextRange.Font.Bold = msoTrue
-        .TextFrame.TextRange.Font.Size = 24
+        .TextFrame.TextRange.Font.Size = 28
+        .TextFrame.TextRange.Font.Color.RGB = RGB(255, 255, 255) ' Oq yozuv
         .TextFrame.TextRange.ParagraphFormat.Alignment = ppAlignCenter
         .TextFrame.VerticalAnchor = msoAnchorMiddle
     End With
     
-    ' B) Chap tomondagi Jadval (Damas shabloniga o'xshatib)
+    ' --- JADVAL (Chap tomon - Kirillcha) ---
     Dim tbl As Shape
-    Set tbl = newSlide.Shapes.AddTable(8, 2, 30, 80, 450, 400)
+    Set tbl = newSlide.Shapes.AddTable(9, 2, 30, 90, 420, 400)
     With tbl.Table
-        .Columns(1).Width = 150
-        .Columns(2).Width = 300
-        ' Shablon so'zlarini yozib qo'yamiz
-        .Cell(1, 1).Shape.TextFrame.TextRange.Text = "Balansda saqlovchi"
-        .Cell(2, 1).Shape.TextFrame.TextRange.Text = "Mulk nomi"
-        .Cell(3, 1).Shape.TextFrame.TextRange.Text = "Manzili"
-        .Cell(4, 1).Shape.TextFrame.TextRange.Text = "Maydoni"
-        .Cell(5, 1).Shape.TextFrame.TextRange.Text = "Tavsifi"
-        .Cell(6, 1).Shape.TextFrame.TextRange.Text = "Holati"
-        .Cell(7, 1).Shape.TextFrame.TextRange.Text = "Balansga olingan sana"
-        .Cell(8, 1).Shape.TextFrame.TextRange.Text = "Balans qiymati"
+        .Columns(1).Width = 140
+        .Columns(2).Width = 280
+        
+        ' Yozuvlarni Kirillchaga o'zgartirdim
+        SetCellText tbl.Table, 1, 1, "Балансда сақловчи"
+        SetCellText tbl.Table, 2, 1, "Мулк номи"
+        SetCellText tbl.Table, 3, 1, "Манзили"
+        SetCellText tbl.Table, 4, 1, "Майдони"
+        SetCellText tbl.Table, 5, 1, "Тавсифи"
+        SetCellText tbl.Table, 6, 1, "Коммуникация"
+        SetCellText tbl.Table, 7, 1, "Ҳолати"
+        SetCellText tbl.Table, 8, 1, "Балансга олинган сана"
+        SetCellText tbl.Table, 9, 1, "Баланс қиймати"
+        
+        ' 7-qator (Holati) ga standart "Қониқарли" deb yozib qo'yamiz (Damasdagidek)
+        SetCellText tbl.Table, 7, 2, "Қониқарли"
+        
+        ' Jadval stili
         .ApplyStyle "{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}"
     End With
 
-    ' 4. RASMLARNI JOYLASHTIRISH (2x2 GRID)
+    ' --- RASMLARNI JOYLASH (O'ng tomon - Zich 2x2) ---
     Dim imgW As Single, imgH As Single
     Dim startX As Single, startY As Single
     Dim gap As Single
     Dim r As Integer, c As Integer
     Dim newPic As ShapeRange
     
-    ' O'ng tomon parametrlari
-    startX = 500  ' Jadvaldan keyin boshlanadi
-    startY = 80   ' Tepadan joy
-    imgW = 220    ' Rasm kengligi
-    imgH = 160    ' Rasm balandligi
-    gap = 10      ' Oradagi masofa
+    ' Parametrlarni "Damas" rasmidagidek to'g'irlaymiz
+    startX = 470   ' Jadvalga yaqinroq
+    startY = 90    ' Jadval bilan bir chiziqda
+    imgW = 230     ' Rasm kattaroq
+    imgH = 160     ' Balandligi
+    gap = 5        ' Orasi juda yaqin (zich) bo'lishi kerak
     
-    ' Har bir rasmni ko'chirib joylaymiz
     For i = 1 To picColl.Count
-        If i > 4 Then Exit For ' 4 tadan ortiq bo'lsa to'xtasin (sig'maydi)
+        If i > 4 Then Exit For
         
         picColl(i).Copy
         Set newPic = newSlide.Shapes.Paste
         
-        ' Qator va Ustunni hisoblash (0 yoki 1)
-        r = (i - 1) \ 2  ' 1,2 -> 0-qator; 3,4 -> 1-qator
-        c = (i - 1) Mod 2 ' 1,3 -> 0-ustun; 2,4 -> 1-ustun
+        r = (i - 1) \ 2
+        c = (i - 1) Mod 2
         
         With newPic
             .LockAspectRatio = msoTrue
-            ' Enini to'g'irlaymiz
             .Width = imgW
-            ' Agar bo'yi uzun bo'lib ketsa, qirqamiz (Crop)
+            
+            ' Ekranga sig'may qolmasligi va bir xil turishi uchun "Crop" qilamiz
             If .Height > imgH Then
                 .PictureFormat.CropBottom = .Height - imgH
+            ElseIf .Height < imgH Then
+                ' Agar rasm kichkina bo'lsa, o'rtada tursin (muammo bo'lmasligi uchun)
             End If
-            ' Joylash
+            
             .Left = startX + (c * (imgW + gap))
             .Top = startY + (r * (imgH + gap))
             
-            ' Ramka qo'shish (Damasdagidek ko'rinishi uchun)
+            ' Oq ramka (Damas stilida rasmlar ajralib turishi uchun)
             .Line.Visible = msoTrue
             .Line.ForeColor.RGB = RGB(255, 255, 255)
-            .Line.Weight = 2
+            .Line.Weight = 3
         End With
     Next i
     
-    MsgBox "Tayyor! Rasmlar o'tkazildi.", vbInformation
+    MsgBox "Tayyor! Kirillcha variant yaratildi.", vbInformation
+End Sub
+
+' Yozuv yozishni osonlashtiruvchi yordamchi kod
+Sub SetCellText(t As Table, r As Integer, c As Integer, txt As String)
+    t.Cell(r, c).Shape.TextFrame.TextRange.Text = txt
+    t.Cell(r, c).Shape.TextFrame.TextRange.Font.Name = "Calibri"
+    t.Cell(r, c).Shape.TextFrame.TextRange.Font.Size = 11
+    ' Chap ustunni qalin (Bold) qilamiz
+    If c = 1 Then t.Cell(r, c).Shape.TextFrame.TextRange.Font.Bold = msoTrue
 End Sub
