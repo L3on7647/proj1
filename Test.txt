@@ -1,232 +1,206 @@
-Sub PasportUniversal()
-    Dim pptApp As Object
-    Dim targetPres As Object, sourcePres As Object
-    Dim pptSlide As Object
-    Dim excelSheet As Worksheet
-    Dim lastRow As Long, i As Long
-    Dim targetPath As String, sourcePath As String
-    Dim vinCode As String
-    Dim isFound As String
-    
-    ' ================= SOZLAMALAR =================
-    targetPath = "C:\Users\User\Desktop\Паспорт шаблон (002) (002).pptx"
-    sourcePath = "C:\Users\User\Desktop\RASMLAR_BAZASI.pptx" 
-    Set excelSheet = ThisWorkbook.Sheets("TABLE")
-    ' ==============================================
+import os
+import shutil
+import pandas as pd
+import win32com.client as win32
+from pptx import Presentation
+from pptx.enum.shapes import MSO_SHAPE_TYPE
 
-    Application.ScreenUpdating = False
-    
-    On Error Resume Next
-    Set pptApp = GetObject(, "PowerPoint.Application")
-    If Err.Number <> 0 Then Set pptApp = CreateObject("PowerPoint.Application")
-    On Error GoTo 0
-    pptApp.Visible = True
-    
-    Set targetPres = pptApp.Presentations.Open(targetPath)
-    Set sourcePres = pptApp.Presentations.Open(sourcePath)
-    
-    lastRow = excelSheet.Cells(excelSheet.Rows.Count, 1).End(xlUp).Row
+# ================= SOZLAMALAR (RASMDAGI YO'LLAR) =================
+BASE_DIR = r"C:\ShaxzodOtchet\Automatization"
+DONOR_PATH = os.path.join(BASE_DIR, "JAMI.pptx")      # Rasmlar manbasi
+SHABLON_PATH = os.path.join(BASE_DIR, "PASPORT2.pptx") # Shablon
+EXCEL_PATH = os.path.join(BASE_DIR, "table.xlsx")     # Ma'lumotlar
+TEMP_IMG_DIR = os.path.join(BASE_DIR, "TEMP_IMAGES")  # Vaqtincha papka
 
-    For i = 2 To lastRow
-        DoEvents
-        
-        ' 1. Slayd yaratish
-        targetPres.Slides(1).Duplicate
-        Set pptSlide = targetPres.Slides(2)
-        
-        ' 2. Jadvalni to'ldirish
-        Dim shp As Object, tbl As Object
-        For Each shp In pptSlide.Shapes
-            If shp.HasTable Then
-                Set tbl = shp.Table
-                tbl.Cell(1, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 1).Value
-                tbl.Cell(2, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 2).Value
-                tbl.Cell(3, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 3).Value
-                tbl.Cell(4, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 4).Value
-                tbl.Cell(5, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 5).Value
-                tbl.Cell(6, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 6).Value
-                tbl.Cell(7, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 7).Value
-                tbl.Cell(8, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 8).Value
-                tbl.Cell(9, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 9).Value
-                tbl.Cell(10, 2).Shape.TextFrame.TextRange.Text = excelSheet.Cells(i, 10).Value
-                Exit For
-            End If
-        Next shp
-        
-        ' 3. VIN kodni olish
-        vinCode = Replace(Trim(excelSheet.Cells(i, 11).Value), " ", "")
-        
-        ' 4. Rasmlarni qidirish
-        isFound = "VIN Topilmadi" ' Default holat
-        If Len(vinCode) > 3 Then
-            isFound = RasmlarniTop(sourcePres, pptSlide, vinCode)
-        End If
-        
-        ' Natijani Excelga yozish
-        excelSheet.Cells(i, 12).Value = isFound
-        
-        pptSlide.MoveTo toPos:=targetPres.Slides.Count
-    Next i
+# Rasm o'lchamlari (Pointlarda: 1 sm = 28.35 pt)
+IMG_W = 255    # 9 sm
+IMG_H = 194.5  # 6.86 sm
+START_L = 360  # Chapdan masofa
+START_T = 80   # Tepadan masofa
 
-    Application.ScreenUpdating = True
-    MsgBox "Tayyor! L ustuniga qarang: Nima uchun rasm o'tmaganini yozib qo'ydim.", vbInformation
-End Sub
+# ================= 1. RASMLARNI SUG'URIB OLISH (FAST MODE) =================
+def extract_images_optimized():
+    print("1. Donor fayldan rasmlar olinmoqda... (Kutib turing)")
+    
+    # Vaqtincha papkani tozalash
+    if os.path.exists(TEMP_IMG_DIR):
+        shutil.rmtree(TEMP_IMG_DIR)
+    os.makedirs(TEMP_IMG_DIR)
 
-' --- KUCHAYTIRILGAN QIDIRUV VA NUSXA OLISH ---
-Function RasmlarniTop(sourcePres As Object, targetSlide As Object, cleanVin As String) As String
-    Dim sld As Object
-    Dim shp As Object
-    Dim foundSlide As Object
-    Dim picCount As Integer
-    Dim newPic As Object
-    Dim slideText As String
-    Dim r As Long, c As Long
+    # python-pptx yordamida ochamiz (Bu PowerPointni ochmaydi, shuning uchun juda tez)
+    prs = Presentation(DONOR_PATH)
     
-    ' O'lchamlar
-    Dim imgWidth As Double: imgWidth = 255
-    Dim imgHeight As Double: imgHeight = 194.5
-    Dim startLeft As Double: startLeft = 360
-    Dim startTop As Double: startTop = 80
-    
-    Set foundSlide = Nothing
-    
-    ' 1. VIN KOD BO'YICHA SLAYDNI TOPISH
-    For Each sld In sourcePres.Slides
-        For Each shp In sld.Shapes
-            ' Matn ichidan qidirish
-            If shp.HasTextFrame Then
-                If shp.TextFrame.HasText Then
-                    slideText = Replace(shp.TextFrame.TextRange.Text, " ", "")
-                    If InStr(1, slideText, cleanVin, vbTextCompare) > 0 Then
-                        Set foundSlide = sld
-                        Exit For
-                    End If
-                End If
-            End If
-            ' Jadval ichidan qidirish
-            If shp.HasTable Then
-                For r = 1 To shp.Table.Rows.Count
-                    For c = 1 To shp.Table.Columns.Count
-                         If shp.Table.Cell(r, c).Shape.TextFrame.HasText Then
-                            slideText = Replace(shp.Table.Cell(r, c).Shape.TextFrame.TextRange.Text, " ", "")
-                            If InStr(1, slideText, cleanVin, vbTextCompare) > 0 Then
-                                Set foundSlide = sld
-                                Exit For
-                            End If
-                         End If
-                    Next c
-                Next r
-            End If
-        Next shp
-        If Not foundSlide Is Nothing Then Exit For
-    Next sld
-    
-    ' Agar slayd topilmasa
-    If foundSlide Is Nothing Then
-        RasmlarniTop = "VIN Topilmadi"
-        Exit Function
-    End If
-    
-    ' 2. SLAYD TOPILDI -> ENDI RASMLARNI KO'CHIRAMIZ
-    picCount = 0
-    RasmlarniTop = "Rasm Yo'q" ' Slayd bor, lekin rasm yo'q bo'lishi mumkin
-    
-    For Each shp In foundSlide.Shapes
-        ' Jadvallarni o'tkazib yuboramiz
-        If shp.HasTable Then GoTo KeyingiShakl
+    for slide_idx, slide in enumerate(prs.slides):
+        vin_code = None
         
-        ' Yozuvlarni o'tkazib yuboramiz (faqat rasm kerak)
-        If shp.HasTextFrame Then
-            If shp.TextFrame.HasText Then GoTo KeyingiShakl
-        End If
-        
-        ' --- GURUHLAR (GROUP) BILAN ISHLASH ---
-        If shp.Type = 6 Then ' msoGroup (Guruhlangan obyekt)
-            Dim subShp As Object
-            For Each subShp In shp.GroupItems
-                ' Guruh ichidagi rasmni tekshiramiz
-                If subShp.Type = 13 Or subShp.Type = 7 Then ' Picture or Embedded
-                    Call CopyPasteImage(subShp, targetSlide, picCount, startLeft, startTop, imgWidth, imgHeight)
-                    RasmlarniTop = "OK (Guruhdan)"
-                    If picCount >= 4 Then Exit Function
-                End If
-            Next subShp
-            GoTo KeyingiShakl
-        End If
-
-        ' --- ODDIY RASMLAR ---
-        ' Type 13 = Picture, Type 7 = Embedded, Type 1 = AutoShape (bazan rasm bo'ladi)
-        ' Type 14 = Placeholder (Picture Placeholder)
-        Dim isPic As Boolean: isPic = False
-        
-        If shp.Type = 13 Or shp.Type = 7 Then isPic = True
-        If shp.Type = 14 Then
-            If shp.PlaceholderFormat.ContainedType = 18 Then isPic = True ' Picture Placeholder
-        End If
-        
-        ' Agar shakl (Rectangle) bo'lsa-yu, ichida rasm bo'lsa (UserPicture)
-        If shp.Type = 1 Then 
-             ' Buni aniqlash qiyin, shuning uchun shunchaki copy qilib ko'ramiz
-             ' lekin matni yo'qligiga ishonch hosil qilish kerak (tepada tekshirdik)
-             isPic = True
-        End If
-
-        If isPic Then
-            Call CopyPasteImage(shp, targetSlide, picCount, startLeft, startTop, imgWidth, imgHeight)
-            RasmlarniTop = "OK"
-            If picCount >= 4 Then Exit Function
-        End If
-        
-KeyingiShakl:
-    Next shp
-End Function
-
-' --- KO'CHIRISH VA JOYLASH UCHUN ALOHIDA SUB ---
-Sub CopyPasteImage(shp As Object, targetSlide As Object, ByRef picCount As Integer, startLeft As Double, startTop As Double, w As Double, h As Double)
-    Dim newPic As Object
-    Dim retry As Integer
-    
-    shp.Copy
-    DoEvents
-    
-    On Error Resume Next
-    targetSlide.Shapes.Paste
-    
-    ' Agar xato bersa qayta urinish
-    If Err.Number <> 0 Then
-        Err.Clear
-        For retry = 1 To 500
-            DoEvents
-            targetSlide.Shapes.Paste
-            If Err.Number = 0 Then Exit For
-        Next retry
-    End If
-    
-    If Err.Number = 0 Then
-        Set newPic = targetSlide.Shapes(targetSlide.Shapes.Count)
-        With newPic
-            .LockAspectRatio = msoFalse
-            .Width = w
-            .Height = h
+        # A) Slayddan VIN kodni qidiramiz (Text va Jadval ichidan)
+        for shape in slide.shapes:
+            # Matn ichidan
+            if shape.has_text_frame:
+                text = shape.text_frame.text.replace(" ", "").strip()
+                if len(text) > 5 and any(c.isdigit() for c in text) and len(text) < 25:
+                    vin_code = text
+                    break
             
-            If (picCount Mod 2) = 0 Then
-                .Left = startLeft
-            Else
-                .Left = startLeft + w + 5
-            End If
+            # Jadval ichidan
+            if shape.has_table:
+                for row in shape.table.rows:
+                    for cell in row.cells:
+                        text = cell.text_frame.text.replace(" ", "").strip()
+                        if len(text) > 5 and any(c.isdigit() for c in text) and len(text) < 25:
+                            vin_code = text
+                            break
+                    if vin_code: break
+            if vin_code: break
+        
+        # B) Agar VIN topilsa, shu slayddagi rasmlarni papkaga saqlaymiz
+        if vin_code:
+            save_path = os.path.join(TEMP_IMG_DIR, vin_code)
+            if not os.path.exists(save_path):
+                os.makedirs(save_path)
             
-            If picCount < 2 Then
-                .Top = startTop
-            Else
-                .Top = startTop + h + 5
-            End If
+            img_count = 0
+            # Shakllarni aylanamiz (Guruhlarni ham tekshiramiz)
+            shapes_to_check = list(slide.shapes)
             
-            ' Chiroyli ramka
-            .Line.Visible = msoTrue
-            .Line.Weight = 0.5
-            .Line.ForeColor.RGB = RGB(0, 0, 0)
-        End With
-        picCount = picCount + 1
-    End If
-    On Error GoTo 0
-End Sub
+            for shape in shapes_to_check:
+                # Agar Rasm bo'lsa
+                if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
+                    with open(os.path.join(save_path, f"{img_count}.jpg"), "wb") as f:
+                        f.write(shape.image.blob)
+                    img_count += 1
+                
+                # Agar Guruh (Group) bo'lsa, ichidagilarni ro'yxatga qo'shamiz
+                elif shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+                    shapes_to_check.extend(list(shape.shapes))
+
+    print("   Rasmlar bazasi tayyorlandi!")
+
+# ================= 2. PASPORT YARATISH (WIN32COM) =================
+def create_passports():
+    print("2. Pasportlar yaratilmoqda...")
+    
+    # Excelni o'qish
+    df = pd.read_excel(EXCEL_PATH, header=0) # 1-qator header deb hisoblanadi
+    # Agar Excelda header bo'lmasa, header=None qilib, column index bilan ishlash kerak
+    
+    # PowerPoint dasturini ochish
+    ppt_app = win32.Dispatch("PowerPoint.Application")
+    ppt_app.Visible = True
+    
+    # Shablonni ochish
+    pres = ppt_app.Presentations.Open(SHABLON_PATH)
+    
+    # --- QATORLAR BOYICHA SIKL ---
+    for index, row in df.iterrows():
+        try:
+            # 1. Shablondan (1-slayd) nusxa olish
+            pres.Slides(1).Duplicate()
+            # Yangi slayd har doim nusxa olganda 2-raqam bo'lib tushadi
+            slide = pres.Slides(2) 
+            
+            # Excel ma'lumotlarini olish (Index 0 dan boshlanadi)
+            # A=0, B=1, C=2, D=3, E=4, F=5, G=6, H=7, I=8, J=9, K=10 (VIN)
+            val_a = str(row.iloc[0]) if not pd.isna(row.iloc[0]) else ""
+            val_b = str(row.iloc[1]) if not pd.isna(row.iloc[1]) else ""
+            val_c = str(row.iloc[2]) if not pd.isna(row.iloc[2]) else ""
+            val_d = str(row.iloc[3]) if not pd.isna(row.iloc[3]) else ""
+            val_e = str(row.iloc[4]) if not pd.isna(row.iloc[4]) else "" # TAVSIF
+            val_f = str(row.iloc[5]) if not pd.isna(row.iloc[5]) else ""
+            val_g = str(row.iloc[6]) if not pd.isna(row.iloc[6]) else ""
+            val_h = str(row.iloc[7]) if not pd.isna(row.iloc[7]) else ""
+            val_i = str(row.iloc[8]) if not pd.isna(row.iloc[8]) else ""
+            val_j = str(row.iloc[9]) if not pd.isna(row.iloc[9]) else ""
+            val_vin = str(row.iloc[10]).replace(" ", "").strip() if not pd.isna(row.iloc[10]) else ""
+
+            # 2. Slayddagi elementlarni almashtirish
+            for shp in slide.Shapes:
+                # A) JADVALNI TO'LDIRISH
+                if shp.HasTable:
+                    tbl = shp.Table
+                    try:
+                        # VBA dagi logika: Cell(Qator, Ustun)
+                        # Jadvalning 2-ustuniga yozamiz
+                        tbl.Cell(1, 2).Shape.TextFrame.TextRange.Text = val_a
+                        tbl.Cell(2, 2).Shape.TextFrame.TextRange.Text = val_b
+                        tbl.Cell(3, 2).Shape.TextFrame.TextRange.Text = val_c
+                        tbl.Cell(4, 2).Shape.TextFrame.TextRange.Text = val_d
+                        tbl.Cell(5, 2).Shape.TextFrame.TextRange.Text = val_e # Tavsif (Jadvalga)
+                        tbl.Cell(6, 2).Shape.TextFrame.TextRange.Text = val_f
+                        tbl.Cell(7, 2).Shape.TextFrame.TextRange.Text = val_g
+                        tbl.Cell(8, 2).Shape.TextFrame.TextRange.Text = val_h
+                        tbl.Cell(9, 2).Shape.TextFrame.TextRange.Text = val_i
+                        tbl.Cell(10, 2).Shape.TextFrame.TextRange.Text = val_j
+                    except:
+                        pass # Agar jadval qatori yetmasa xato bermasin
+                
+                # B) HEADERDAGI {TAVSIF} NI ALMASHTIRISH (Yangi talab)
+                if shp.HasTextFrame:
+                    if shp.TextFrame.HasText:
+                        text_range = shp.TextFrame.TextRange
+                        if "{TAVSIF}" in text_range.Text:
+                            # Faqat {TAVSIF} so'zini o'zgartiradi
+                            text_range.Replace("{TAVSIF}", val_e)
+                        # Yoki agar "{TASNIF}" deb yozgan bo'lsangiz:
+                        if "{TASNIF}" in text_range.Text:
+                            text_range.Replace("{TASNIF}", val_e)
+
+            # 3. RASMLARNI PAPKADAN OLIB QO'YISH
+            img_folder = os.path.join(TEMP_IMG_DIR, val_vin)
+            
+            if os.path.exists(img_folder):
+                images = sorted(os.listdir(img_folder))
+                pic_count = 0
+                
+                for img_file in images:
+                    if pic_count >= 4: break # Maksimum 4 ta
+                    
+                    full_path = os.path.join(img_folder, img_file)
+                    
+                    # Rasmni Insert qilish
+                    new_pic = slide.Shapes.AddPicture(FileName=full_path, 
+                                                    LinkToFile=False, 
+                                                    SaveWithDocument=True, 
+                                                    Left=0, Top=0, Width=IMG_W, Height=IMG_H)
+                    
+                    # --- 2x2 GRID LOGIKASI ---
+                    new_pic.LockAspectRatio = 0 # msoFalse (cho'zilib ketsa ham joyiga tushsin)
+                    
+                    # Gorizontal (Chap/O'ng)
+                    if pic_count % 2 == 0:
+                        new_pic.Left = START_L
+                    else:
+                        new_pic.Left = START_L + IMG_W + 5
+                    
+                    # Vertikal (Tepa/Past)
+                    if pic_count < 2:
+                        new_pic.Top = START_T
+                    else:
+                        new_pic.Top = START_T + IMG_H + 5
+                        
+                    # Ramka
+                    new_pic.Line.Visible = -1 
+                    new_pic.Line.Weight = 0.5
+                    new_pic.Line.ForeColor.RGB = 0 
+                    
+                    pic_count += 1
+            
+            # 4. Slaydni oxiriga ko'chirish
+            slide.MoveTo(toPos=pres.Slides.Count)
+            
+        except Exception as e:
+            print(f"Xatolik (Qator {index}): {e}")
+
+    # Tugatish
+    print("TAYYOR! Barcha pasportlar yaratildi.")
+    # Agar temp papkani o'chirmoqchi bo'lsangiz:
+    # shutil.rmtree(TEMP_IMG_DIR)
+
+# ================= DASTURNI ISHGA TUSHIRISH =================
+if __name__ == "__main__":
+    # 1. Rasmlarni ajratib olish (Agar rasmlar bazasi o'zgarmagan bo'lsa,
+    # bu qatorni kommentga olib qo'yish mumkin vaqtni tejash uchun)
+    extract_images_optimized()
+    
+    # 2. Asosiy ish
+    create_passports()
