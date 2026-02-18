@@ -1,199 +1,297 @@
-import os
-import shutil
-import pandas as pd
-import win32com.client as win32
-from pptx import Presentation
-from pptx.enum.shapes import MSO_SHAPE_TYPE
+select 
+a.* ,
+   case when a.seizured is NULL then a.reserved_summa
+       when a.seizured  is not NULL  and nvl((a.max_overdue_sum-end_date_overdue),0)<=0 then 0
+           when a.seizured  is not NULL  and nvl((a.max_overdue_sum-end_date_overdue),0)>0 then (a.max_overdue_sum-end_date_overdue)  end as seizured_sum
 
-# ================= SOZLAMALAR =================
-BASE_DIR = r"C:\ShaxzodOtchet\Automatization"
-DONOR_PATH = os.path.join(BASE_DIR, "JAMI.pptx")
-SHABLON_PATH = os.path.join(BASE_DIR, "PASPORT2.pptx")
-EXCEL_PATH = os.path.join(BASE_DIR, "table.xlsx")
-TEMP_IMG_DIR = os.path.join(BASE_DIR, "TEMP_IMAGES")
+from
 
-# Rasm o'lchamlari
-IMG_W = 255
-IMG_H = 194.5
-START_L = 360
-START_T = 80
+(
+with
+Loanportfolio as
+(
+select 
+lp.siteid,
+lp.dealid,
+lp.dealtypeid,
+lp.currencyid,
+max(lp.summa_overdue) max_overdue_sum,
+max(case when lp.arcdate=lp.max_arcdate then lp.summa_overdue else 0 end) as end_date_overdue
+from
+(
+select
+lp.arcdate,
+lp.siteid,
+lp.dealid,
+lp.dealtypeid,
+lp.currencyid, 
+nvl((lp.overdueamounteq + lp.claimoverdueamounteq + lp.intoverdueamounteq + lp.intoverdue31amounteq +
+     lp.feeoverdueamounteq_2__9 + lp.feeoverdueamounteq_3579 + lp.feeaccrualamounteq_3578+lp.hopelessamounteq+lp.hopelessoverdueamounteq
+     +lp.inthopelessamounteq)/100,0) as summa_overdue,
+     max(lp.arcdate) over () as max_arcdate
+from b2_olap_uz.ar_loanportfolio lp --on (mt.dealid = lp.dealid)
+ where lp.arcdate >=  trunc(&p_date_start, 'dd') 
+ and  lp.arcdate <= trunc(&p_date_end, 'dd') 
+ and lp.dealtypeid in (355,356)
+ and lp.sourcesystemid=50
+ AND (lp.loanstatemanual != '3'
+    OR (lp.loanstatemanual IS NULL AND lp.loanstateid NOT IN (-1, 7, 10)))
+ --and dealid=27586168
+ )lp
+ group by 
+ lp.siteid,
+lp.dealid,
+lp.dealtypeid,
+lp.currencyid
+ ),
+ max_overdue as
+(
+select 
+ov."Дата отчета" ,
+ov."Код сделки Кредита",
+max(ov."Макс.дни просрочки") as overdue_days
+from
+datamarts.fact_count_days_overdue ov 
+ where ov."Дата отчета" >=  trunc(&p_date_start, 'dd') 
+ and  ov."Дата отчета" <= trunc(&p_date_end, 'dd') 
+group by
+ov."Дата отчета" ,
+ov."Код сделки Кредита"
+),
 
-# ================= 1. RASMLARNI EXCEL BO'YICHA QIDIRISH =================
-def extract_images_targeted():
-    print("1. Exceldagi VIN kodlar bo'yicha rasmlar qidirilmoqda...")
-    
-    # 1. Exceldan VIN kodlarni o'qib olamiz
-    try:
-        # Header=0 (1-qator), K ustun (11-ustun) VIN deb hisoblaymiz
-        df = pd.read_excel(EXCEL_PATH, header=0, usecols="A:K", dtype=str)
-        target_vins = []
-        
-        # VIN kodlarni tozalab ro'yxatga olamiz
-        for val in df.iloc[:, 10]: # 10-indeks = K ustun
-            if pd.notna(val):
-                clean_vin = str(val).replace(" ", "").strip()
-                if len(clean_vin) > 5:
-                    target_vins.append(clean_vin)
-        
-        target_vins = list(set(target_vins)) # Takroriy kodlarni olib tashlaymiz
-        print(f"   Jami {len(target_vins)} ta unikal VIN kod qidirilmoqda...")
-        
-    except Exception as e:
-        print(f"Excelni o'qishda xatolik: {e}")
-        return
+activity_status
+as 
+(
+select 
+ csa.reference as dealid,
+ a.accounts1 as spin_dealid,
+ a.legal_entry_status,
+ (case when a.coll_stage = 20 then 'HARD' else 'LEGAL' end) as stage,
+ (case when a.coll_stage = 20 then a.hard_entry_date else a.legal_entry_date end) as entry_date,
+ coalesce( a.exec_assign_user_id,a.legal_assign_user_id) as user_id
+from 
+ spin.raw_cs_account_collection a 
+ left join 
+ spin.raw_cs_account csa on csa.accounts1 = a.accounts1
 
-    # Papkani tozalash
-    if os.path.exists(TEMP_IMG_DIR):
-        shutil.rmtree(TEMP_IMG_DIR)
-    os.makedirs(TEMP_IMG_DIR)
+where 
+ a.coll_stage in (20, 30) 
+-- and csa.reference=23779062
 
-    # 2. Donor faylni ochib qidiramiz
-    prs = Presentation(DONOR_PATH)
-    found_count = 0
-    
-    for slide in prs.slides:
-        # Slayddagi barcha matnlarni bitta string qilamiz (qidirish oson bo'lishi uchun)
-        slide_text_content = ""
-        for shape in slide.shapes:
-            if shape.has_text_frame:
-                slide_text_content += shape.text_frame.text.replace(" ", "").upper()
-            if shape.has_table:
-                for row in shape.table.rows:
-                    for cell in row.cells:
-                        slide_text_content += cell.text_frame.text.replace(" ", "").upper()
-        
-        # 3. Bizning VIN kodlar shu slaydda bormi?
-        matched_vin = None
-        for vin in target_vins:
-            # VIN slide ichida bormi?
-            if vin.upper() in slide_text_content:
-                matched_vin = vin
-                break
-        
-        # 4. Agar topilsa, rasmlarni shu VIN papkasiga saqlaymiz
-        if matched_vin:
-            save_path = os.path.join(TEMP_IMG_DIR, matched_vin)
-            if not os.path.exists(save_path):
-                os.makedirs(save_path)
-            
-            img_count = 0
-            
-            # Ichki funksiya: Rasm saqlash
-            def save_img(shp):
-                nonlocal img_count
-                try:
-                    if shp.shape_type == MSO_SHAPE_TYPE.PICTURE:
-                        with open(os.path.join(save_path, f"{img_count}.jpg"), "wb") as f:
-                            f.write(shp.image.blob)
-                        img_count += 1
-                    elif shp.shape_type == MSO_SHAPE_TYPE.PLACEHOLDER and hasattr(shp, "image"):
-                        with open(os.path.join(save_path, f"{img_count}.jpg"), "wb") as f:
-                            f.write(shp.image.blob)
-                        img_count += 1
-                    elif shp.shape_type == MSO_SHAPE_TYPE.GROUP:
-                        for sub in shp.shapes: save_img(sub)
-                except: pass
+),
+visit_data as 
+(
+SELECT
+ csa.accounts1, csa.reference as dealid, cscv.assign_user_id as hard_user_id,
+ cscv.plan_visit_date,cscv.visit_result,cscv.visit_result_date,ru.loginname
+FROM 
+ spin.raw_cs_customer_visit cscv 
+ join 
+ spin.raw_accounts a on a.customerid = cscv.customers1 
+ join 
+ spin.raw_cs_account csa on csa.accounts1 = a.id
+  left join
+spin.raw_users ru on cscv.assign_user_id = ru.id
+where cscv.assign_user_id is not null
+),
 
-            for shape in slide.shapes:
-                save_img(shape)
-            
-            if img_count > 0:
-                # print(f"   Topildi: {matched_vin} ({img_count} rasm)")
-                found_count += 1
+/*combined_tab as
+(
+select 
+ ls.dealid,
+ ls.legal_entry_status,
+ ls.spin_dealid,
+ ls.stage,
+ ls.entry_date,
+ coalesce(thd.hard_user_id,ls.user_id) as user_id
+from 
+ Legal_status ls
+ left join
+ table_hard_data thd on (ls.dealid = thd.reference)
+ 
+),*/
 
-    print(f"   Bajarildi! {found_count} ta VIN kod uchun rasmlar topildi.")
+car_seizure ---                     
+ as
+(
+select
+ a.accountid as spin_dealid
+--max(aa.datetime)keep(dense_rank last order by aa.datetime) as date_seizure,
+-- max(aa.summary)keep(dense_rank last order by aa.datetime) as car_seizure,
+from  spin.raw_accountactivities a 
+        where a.childid in (585, 523, 586) 
+        and a.datetime >=trunc(&p_date_start, 'dd') 
+        and a.datetime<=trunc(&p_date_end, 'dd') 
+                       
+group by
+ a.accountid
+),
 
-# ================= 2. PASPORT YARATISH =================
-def create_passports():
-    print("2. Pasportlar yaratilmoqda...")
-    
-    try:
-        # Excelni o'qish (Faqat kerakli ustunlar)
-        df = pd.read_excel(EXCEL_PATH, header=0, usecols="A:K", dtype=str)
-    except Exception as e:
-        print(f"Xatolik: {e}")
-        return
+ transactions as 
+  ( 
+select 
+--cl.month,
+--dtr.arcdate,
+dtr.siteid,
+lp.dealid,
+sum(case when aa.baccountid in (16377,12505,15701,95413,12605) then dtr.usesumma*r.rate/r.base  end)/100 as overdue_paid,
+sum( dtr.usesumma*r.rate/r.base)/100 as all_paid
+-- - sum(case when dtr.dealdocumenttypeid in (310) and dtr.dealdocumenttypeidex is null and dtr.isreversal = 1 and dtr.otbs = 1 then dtr.usesumma*r.rate/r.base else 0 end)/100)  
+--sum(case when dtr.dealdocumenttypeid in (12)  and dtr.otbs = 1 and dtr.dealdocumenttypeidex is null then dtr.usesumma*r.rate/r.base  end)/100 as Interest
+-- - sum(case when dtr.dealdocumenttypeid in (311) and dtr.dealdocumenttypeidex is null and dtr.isreversal = 1 and dtr.otbs = 0 then dtr.usesumma*r.rate/r.base else 0 end)/100)                                                    
+ --,dtr.isreversal                
+ from  activity_status lp
+ join creator_k.dealcommercialtranche tr on tr.loandealid=lp.dealid --and tr.tranchetypeid in (1,3)
+ join CREATOR_K.DEALDOCTRANSACTION dtr  on tr.dealid=dtr.dealid 
+ left join
+ (select  aa.accountno,aa.baccountid,aa.siteid,aa.mkid from  csbm.dwh_aaccount aa where aa.dateto=to_date('01.01.3500','dd.mm.yyyy') and
+ (aa.baccountid in (16377,16309,91501,91505,95413,16325) or substr(aa.baccountid,1,2) in (12,13,14,15))
+ and aa.siteid<>1190
+ )aa on aa.mkid=dtr.accountid and aa.siteid=dtr.siteid
+left join b2_olap_uz.dimcurrencyrateall r on r.arcdate=dtr.valuedate and r.currencyid=tr.currencyid
+where  dtr.arcdate >= trunc(&p_date_start, 'dd')  and  dtr.arcdate <=trunc(&p_date_end, 'dd') 
+and dtr.dealdocumenttypeid in (2,12)
+and  dtr.otbs = 1 and dtr.dealdocumenttypeidex is null
+--and  lp.dealid=11403413
+ group by  dtr.siteid,lp.dealid
+),
 
-    ppt_app = win32.Dispatch("PowerPoint.Application")
-    ppt_app.Visible = True
-    pres = ppt_app.Presentations.Open(SHABLON_PATH)
-    
-    for index, row in df.iterrows():
-        try:
-            # Slayd nusxalash
-            pres.Slides(1).Duplicate()
-            slide = pres.Slides(2)
-            
-            # Ma'lumotlarni olish
-            def get_s(i):
-                try:
-                    val = str(row.iloc[i])
-                    if val.lower() in ['nan', 'nat', 'none']: return ""
-                    return val.strip()
-                except: return ""
+Loansecur as
+(
+select lc.dealid,lc.loandealid,lc.shared_reservamounteq/100 as reserved_summa from
+b2_olap_uz.ar_loansecur lc
+join b2_olap_uz.dimsecdeal dc on dc.id=lc.dealid and  trunc(&p_date_end, 'dd')  between dc.date_from and dc.date_to and dc.creditnbusupplyid=23
+join activity_status mt on mt.dealid=lc.loandealid
+where lc.arcdate =  trunc(&p_date_end, 'dd') 
+and lc.sourcesystemid=50
+and dc.dealsecurity_accountedamount<>0
+),
+promise_data
+ as
+(
+select /*+ Parallel(4)*/
+ pps.spin_dealid,
+ pps.dealid,
+ pps.contragentid,
+ pps.spin_contragentid,
+ pps.spin_contact_id,
+ pps.loginname,
+ pps.team_name,
+ pps.child_id,
+ pps.child_name,
+ pps.accountid,
+ pps.datetime,
+ pps.accountactivityid,
+ pps.month_active,
+ pps.arr_amount,
+ to_number(replace(replace(replace(pps.arr_amount,  ' ', ''), chr(160), ''), ',', '.'), '9999999999.99') as summ_promise_payment,
+ pps.arr_date,
+ pps.cancel_penalties,
+ pps.datetime_status,
+ trunc(pps.datetime_status, 'dd') as trunc_datetime_status,
+ pps.activity_status_name,
+ pps.accountactivityid_status,
+ pps.team_name as group_name,
+from 
+ dbt_marts.fct_data_spin_promise_payment_status_fixed pps
+where
+ pps.datetime_status >= trunc(&p_date_start, 'dd')
+ and pps.datetime_status < trunc(&p_date_end, 'dd') + 1
+ and pps.activity_status_name = 'Обещание Выполнено'
+ and upper(pps.team_name) like '%HARD%' 
+)
 
-            vals = [get_s(i) for i in range(11)] # 0 dan 10 gacha (A-K)
-            val_vin = vals[10].replace(" ", "")  # K ustun (VIN)
-            val_tavsif = vals[4]                 # E ustun (TAVSIF)
 
-            # Jadval va Matnlarni almashtirish
-            for shp in slide.Shapes:
-                # Jadval
-                if shp.HasTable:
-                    tbl = shp.Table
-                    try:
-                        for r in range(1, 11): # 1 dan 10 gacha qatorlar
-                            # E ustun (index 4) jadvalning 5-qatoriga tushadi
-                            tbl.Cell(r, 2).Shape.TextFrame.TextRange.Text = vals[r-1]
-                    except: pass
-                
-                # Sarlavhadagi {TAVSIF}
-                if shp.HasTextFrame:
-                    if shp.TextFrame.HasText:
-                        txt = shp.TextFrame.TextRange
-                        if "{TAVSIF}" in txt.Text: txt.Replace("{TAVSIF}", val_tavsif)
-                        if "{TASNIF}" in txt.Text: txt.Replace("{TASNIF}", val_tavsif)
+--select * from car_seizure
 
-            # --- RASMLARNI QO'YISH ---
-            if val_vin:
-                img_folder = os.path.join(TEMP_IMG_DIR, val_vin)
-                
-                if os.path.exists(img_folder):
-                    images = sorted(os.listdir(img_folder))
-                    if images:
-                        count = 0
-                        for img_name in images:
-                            if count >= 4: break
-                            fpath = os.path.join(img_folder, img_name)
-                            
-                            try:
-                                pic = slide.Shapes.AddPicture(fpath, False, True, 0, 0, IMG_W, IMG_H)
-                                pic.LockAspectRatio = 0
-                                
-                                # 2x2 joylashuv
-                                pic.Left = START_L if count % 2 == 0 else START_L + IMG_W + 5
-                                pic.Top = START_T if count < 2 else START_T + IMG_H + 5
-                                
-                                # Ramka
-                                pic.Line.Visible = -1
-                                pic.Line.ForeColor.RGB = 0
-                                pic.Line.Weight = 0.5
-                                
-                                count += 1
-                            except: pass
-                    else:
-                        print(f"DIQQAT: {val_vin} papkasi bo'sh (rasm olinmagan).")
-                else:
-                    # Papka yo'q degani - Donor fayldan bu VIN topilmadi
-                    pass
+select
 
-            slide.MoveTo(toPos=pres.Slides.Count)
-            
-        except Exception as e:
-            print(f"Qator {index} da xatolik: {e}")
+ lp.dealid,
+ mt.spin_dealid,
+   ru.loginname,
+    rte.name team_name,
+     mt.stage,
+  (case
+   when mo.overdue_days = 0 then '0 дней'
+   when mo.overdue_days between 1 and 29 then '   30'
+   when mo.overdue_days between 30 and 60 then '30+'
+   when mo.overdue_days between 61 and 90 then '61-90'
+   when mo.overdue_days between 91 and 119 then '90+'
+   when mo.overdue_days between 120 and 179 then '120+'
+   when mo.overdue_days between 180 and 364 then '180+'
+   when mo.overdue_days > 365 then '365+'
+  end) as days_bucket,
+     lp.max_overdue_sum,
+     lp.end_date_overdue,     
+     (case when mo.overdue_days<=90 then tr.overdue_paid
+                 when mo.overdue_days>90 then tr.all_paid end) as Paidamount,
+     cse.spin_dealid seizured,
+      lc.dealid as secur_dealid
+     ,lc.reserved_summa
+     ,vd.hard_user_id as visit_userid
+     ,vd.loginname  as visit_loginname
+     ,vd.plan_visit_date
+     ,vd.visit_result
+     ,vd.visit_result_date
+     , pd.loginname as promise_loginname
+     , pd.team_name as promise_team
+     , trunc(pd.datetime_status, 'dd') as promise_date
 
-    print("JARAYON TUGADI!")
+  from
+  Loanportfolio lp
+  join
+  activity_status mt on mt.dealid=lp.dealid
+  left join
+  visit_data vd on vd.dealid=mt.dealid
+  left join
+  car_seizure cse on cse.spin_dealid=mt.spin_dealid
+  left join
+  max_overdue mo on mo."Код сделки Кредита"=mt.dealid
+  left join
+  Loansecur lc on lc.loandealid=mt.dealid
+  left join 
+  transactions tr on tr.dealid=lp.dealid
+  left join
+  promise_data pd on pd.dealid=mt.dealid
+    left join
+spin.raw_users ru on mt.user_id = ru.id
+left join
+spin.raw_team rte on ru.teamid = rte.id
 
-if __name__ == "__main__":
-    extract_images_targeted()
-    create_passports()
+
+  group by
+   lp.dealid,
+ mt.spin_dealid,
+   ru.loginname,
+    rte.name,  
+     mt.stage,
+    (case
+   when mo.overdue_days = 0 then '0 дней'
+   when mo.overdue_days between 1 and 29 then '   30'
+   when mo.overdue_days between 30 and 60 then '30+'
+   when mo.overdue_days between 61 and 90 then '61-90'
+   when mo.overdue_days between 91 and 119 then '90+'
+   when mo.overdue_days between 120 and 179 then '120+'
+   when mo.overdue_days between 180 and 364 then '180+'
+   when mo.overdue_days > 365 then '365+'
+  end),
+   (case when mo.overdue_days<=90 then tr.overdue_paid
+                 when mo.overdue_days>90 then tr.all_paid end),
+  cse.spin_dealid,
+   lc.dealid ,
+ lc.reserved_summa
+  ,vd.hard_user_id 
+     ,vd.loginname  
+     ,vd.plan_visit_date
+     ,vd.visit_result
+     ,vd.visit_result_date
+     , pd.loginname 
+     , pd.team_name 
+     ,lp.max_overdue_sum
+    , lp.end_date_overdue
+     , trunc(pd.datetime_status, 'dd')
+ )a
+ --where a.dealid=23779062
+
+ order by a.dealid
+ 
